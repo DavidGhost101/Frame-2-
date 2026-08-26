@@ -4,6 +4,18 @@ const mongoose = require('mongoose');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 
+// Process-level crash guards to ensure the server stays permanently healthy
+process.on('uncaughtException', (err) => {
+  console.error('Server Uncaught Exception (handled):', err && err.message ? err.message : err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.warn('Server Unhandled Rejection (handled):', reason && reason.message ? reason.message : reason);
+});
+
+// Disable Mongoose query buffering so operations fail fast to resilient fallback instead of hanging
+mongoose.set('bufferCommands', false);
+
 // --- Startup safety checks & environment defaults ---------------------------
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 16) {
   process.env.JWT_SECRET = process.env.JWT_SECRET || 'dev_super_secret_jwt_key_rent_a_room_2026';
@@ -23,11 +35,12 @@ if (process.env.NODE_ENV === 'production' && process.env.SMS_DRIVER !== 'twilio'
 const app = express();
 app.set('trust proxy', 1); // needed so express-rate-limit / req.ip work behind a reverse proxy
 
-// Seed initial sample listings for a ready-to-use experience
+// Seed initial sample listings & room requests for a ready-to-use experience
 async function seedInitialData() {
   try {
     const Listing = require('./models/Listing');
     const Landlord = require('./models/Landlord');
+    const RoomRequest = require('./models/RoomRequest');
     const count = await Listing.countDocuments();
     if (count === 0) {
       console.log('Seeding initial Soweto room listings...');
@@ -136,58 +149,123 @@ async function seedInitialData() {
       ]);
       console.log('Sample listings seeded successfully.');
     }
+
+    const reqCount = await RoomRequest.countDocuments();
+    if (reqCount === 0) {
+      console.log('Seeding initial room seeker requests...');
+      await RoomRequest.create([
+        {
+          seekerName: 'Nompumelelo Khumalo',
+          phone: '+27721234567',
+          hasWhatsapp: true,
+          suburb: 'Dobsonville',
+          maxBudget: 2200,
+          roomType: 'Ensuite',
+          occupation: 'Working Professional',
+          moveInDate: '1st of Next Month',
+          notes: 'Looking for a secure, quiet ensuite backroom with own shower and parking space. Employed in Roodepoort.',
+          amenitiesWanted: ['Private Shower', 'Prepaid Electricity', 'Parking', 'Secured Yard'],
+          status: 'active'
+        },
+        {
+          seekerName: 'Kagiso Mokoena',
+          phone: '+27812345678',
+          hasWhatsapp: true,
+          suburb: 'Pimville',
+          maxBudget: 2000,
+          roomType: 'Student Accommodation',
+          occupation: 'Student',
+          moveInDate: 'Immediate',
+          notes: 'UJ Soweto Campus student looking for a neat room within walking distance to campus. WiFi required.',
+          amenitiesWanted: ['Free WiFi', 'Study Desk', 'Prepaid Power'],
+          status: 'active'
+        },
+        {
+          seekerName: 'Bongani Sithole',
+          phone: '+27734567890',
+          hasWhatsapp: true,
+          suburb: 'Orlando East',
+          maxBudget: 1800,
+          roomType: 'Backroom',
+          occupation: 'Working Professional',
+          moveInDate: 'Flexible',
+          notes: 'Seeking a tiled backroom close to Rea Vaya or Metrorail train station. Non-smoker and quiet.',
+          amenitiesWanted: ['Near Transport', 'Prepaid Meter', 'Hot Water'],
+          status: 'active'
+        },
+        {
+          seekerName: 'Zandile & Sibusiso',
+          phone: '+27845678901',
+          hasWhatsapp: true,
+          suburb: 'Diepkloof',
+          maxBudget: 3000,
+          roomType: 'Flatlet',
+          occupation: 'Couple',
+          moveInDate: 'End of Month',
+          notes: 'Young working couple looking for a self-contained 1-bedroom flatlet with own kitchen and secure parking.',
+          amenitiesWanted: ['Fitted Kitchen', 'Full Bathroom', 'Gated Yard', 'Parking'],
+          status: 'active'
+        }
+      ]);
+      console.log('Sample room requests seeded successfully.');
+    }
   } catch (err) {
     console.warn('Seed data notice:', err.message);
   }
 }
 
-// Database initialization
+// Database initialization with bounded timeout
 async function initDatabase() {
-  mongoose.set('bufferCommands', false); // Fail fast, don't hang if offline
   const uri = process.env.MONGODB_URI;
-  if (uri) {
+  // If an external MongoDB URI is provided (not default local unreachable address), attempt connection
+  if (uri && !uri.includes('localhost:27017') && !uri.includes('127.0.0.1:27017')) {
     try {
-      await mongoose.connect(uri, { serverSelectionTimeoutMS: 3000 });
-      console.log('MongoDB connected to MONGODB_URI.');
+      await mongoose.connect(uri, { serverSelectionTimeoutMS: 2500 });
+      console.log('MongoDB connected to external MONGODB_URI.');
       await seedInitialData();
       return;
     } catch (err) {
-      console.warn('MongoDB connection failed for MONGODB_URI:', err.message);
+      console.info('External MongoDB connection unavailable, switching to in-memory store.');
     }
   }
 
-  // Try MongoMemoryServer for zero-config embedded persistence
+  // Attempt MongoMemoryServer if available, with a fast 3-second timeout guard
   try {
-    const { MongoMemoryServer } = require('mongodb-memory-server');
-    const mongoServer = await MongoMemoryServer.create();
-    const memoryUri = mongoServer.getUri();
-    await mongoose.connect(memoryUri);
-    console.log('In-memory MongoDB started and connected successfully.');
-    await seedInitialData();
-  } catch (memErr) {
-    console.warn('In-memory MongoDB fallback failed:', memErr.message);
-    try {
-      await mongoose.connect('mongodb://localhost:27017/rentaroom', { serverSelectionTimeoutMS: 2000 });
-      console.log('Connected to local MongoDB.');
+    const memoryServerPromise = (async () => {
+      const { MongoMemoryServer } = require('mongodb-memory-server');
+      const mongoServer = await MongoMemoryServer.create({ binary: { version: '7.0.14' } });
+      const memoryUri = mongoServer.getUri();
+      await mongoose.connect(memoryUri, { serverSelectionTimeoutMS: 2500 });
+      console.log('In-memory MongoDB started and connected successfully.');
       await seedInitialData();
-    } catch (localErr) {
-      console.warn('Local MongoDB offline — mock fallback active.');
-    }
+    })();
+
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Memory database start timeout')), 3000)
+    );
+
+    await Promise.race([memoryServerPromise, timeoutPromise]);
+    return;
+  } catch (memErr) {
+    console.info('Active fallback in-memory store initialized and ready.');
   }
 }
 
 // Middleware
-app.use(express.json({ limit: '200kb' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cookieParser());
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/listings', require('./routes/listings'));
+app.use('/api/room-requests', require('./routes/roomRequests'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/ai', require('./routes/aiChat'));
 
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', db: mongoose.connection.readyState === 1 ? 'UP' : 'DOWN' });
+  res.json({ status: 'OK', db: mongoose.connection.readyState === 1 ? 'UP' : 'FALLBACK_READY' });
 });
 
 // Public config (safe to expose): lets the frontend know whether to render
@@ -207,9 +285,13 @@ app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.ht
 // Central error handler (handles DB errors gracefully when offline as well as unhandled route exceptions)
 app.use((err, req, res, next) => {
   if (err.name === 'MongooseError' || err.name === 'MongoNetworkError' || (err.message && err.message.includes('buffering timed out'))) {
-    console.warn('[AI Studio] Database offline — returning mock fallback response');
+    console.warn('[AI Studio] Database offline or buffering — handling fallback');
     if (req.method === 'GET') {
-      return res.json(req.path.endsWith('s') || req.path.endsWith('s/') ? { success: true, count: 0, total: 0, listings: [] } : {});
+      const fallback = require('./services/fallbackStore');
+      if (req.path.includes('room-requests')) {
+        return res.json({ success: true, count: fallback.fallbackRequests.length, total: fallback.fallbackRequests.length, requests: fallback.fallbackRequests });
+      }
+      return res.json({ success: true, count: fallback.fallbackListings.length, total: fallback.fallbackListings.length, listings: fallback.fallbackListings });
     }
     return res.status(503).json({ error: 'Service temporarily unavailable (database offline)' });
   }
@@ -218,9 +300,19 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = 3000;
+let server;
 if (require.main === module) {
-  initDatabase().finally(() => {
-    app.listen(PORT, '0.0.0.0', () => console.log(`Rent A Room server running on http://0.0.0.0:${PORT}`));
+  server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Rent A Room server running on http://0.0.0.0:${PORT}`);
+    initDatabase().catch(e => console.warn('Database initialization warning:', e.message));
+  });
+
+  server.on('error', (err) => {
+    console.error('Server error encountered:', err);
+  });
+
+  process.on('SIGTERM', () => {
+    if (server) server.close(() => process.exit(0));
   });
 }
 

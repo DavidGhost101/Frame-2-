@@ -1,6 +1,6 @@
 {
   "name": "Rent A Room",
-  "description": "Township room and backroom listing platform for Soweto and surrounds with SMS OTP verified landlords",
+  "description": "Township room and backroom listing and room seeker platform for Soweto and surrounds with verified WhatsApp contact. Designed and built by David Rakosa.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
