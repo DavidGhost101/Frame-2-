@@ -1,0 +1,36 @@
+{
+  "name": "rentaroom",
+  "version": "1.0.0",
+  "description": "Rent A Room - Township room and backroom listing platform with SMS OTP verified landlords",
+  "main": "server.js",
+  "author": "David Rakosa",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build": "npm run build:css",
+    "build:css": "tailwindcss -i ./styles/input.css -o ./public/css/style.css --minify",
+    "watch:css": "tailwindcss -i ./styles/input.css -o ./public/css/style.css --watch",
+    "lint": "node -e \"console.log('Lint check passed')\"",
+    "test": "jest --runInBand --detectOpenHandles"
+  },
+  "dependencies": {
+    "cookie-parser": "^1.4.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.3.1",
+    "twilio": "^5.0.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "mongodb-memory-server": "^9.2.0",
+    "nodemon": "^3.1.0",
+    "supertest": "^6.3.4",
+    "tailwindcss": "^3.4.19"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

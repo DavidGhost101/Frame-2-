@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en-ZA">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rent A Room | Soweto & Township Room Rentals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/style.css">
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<style>
+  body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #f8fafc; color: #0f172a; }
+  h1,h2,h3,.font-heading { font-family: 'Outfit', sans-serif; }
+</style>
+</head>
+<body class="antialiased min-h-screen flex flex-col justify-between">
+
+<header class="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-slate-200">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-xl bg-brand-500 flex items-center justify-center text-white font-heading font-extrabold text-xl shadow-md">R</div>
+      <span class="text-2xl font-extrabold font-heading text-slate-900 tracking-tight">Rent A <span class="text-brand-500">Room</span></span>
+    </div>
+    <button onclick="toggleModal('addRoomModal')" class="bg-brand-500 hover:bg-brand-600 text-white font-semibold text-sm px-4 py-2 rounded-xl transition shadow-sm hover:shadow">
+      + List Your Room
+    </button>
+  </div>
+</header>
+
+<section class="bg-gradient-to-b from-brand-50 via-white to-slate-50 py-12 px-4 border-b border-slate-100">
+  <div class="max-w-4xl mx-auto text-center space-y-4">
+    <h1 class="text-3xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">
+      Find Affordable Backrooms & Apartments in <span class="text-brand-500">Soweto</span>
+    </h1>
+    <p class="text-slate-600 text-base sm:text-lg max-w-2xl mx-auto">
+      Verified rooms, student residences, and self-contained flats with WiFi, prepaid power, and parking.
+    </p>
+
+    <div class="mt-8 bg-white p-4 rounded-2xl shadow-lg border border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-3 text-left">
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Suburb</label>
+        <input id="suburbFilter" type="text" placeholder="e.g. Dobsonville" oninput="debouncedLoad()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none" />
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Max Rent (ZAR)</label>
+        <select id="priceFilter" onchange="loadListings()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
+          <option value="">Any Rent</option>
+          <option value="2000">Under R2,000</option>
+          <option value="2500">Under R2,500</option>
+          <option value="3000">Under R3,000</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Room Type</label>
+        <select id="typeFilter" onchange="loadListings()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
+          <option value="All">All Types</option>
+          <option value="Ensuite">Ensuite / Own Bath</option>
+          <option value="Backroom">Backroom</option>
+          <option value="Garage">Garage</option>
+          <option value="Flatlet">Flatlet</option>
+          <option value="Student Accommodation">Student Accommodation</option>
+          <option value="Apartment">Apartment</option>
+        </select>
+      </div>
+      <div class="flex items-end">
+        <button onclick="resetFilters()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold text-sm py-2.5 px-4 rounded-xl transition">Reset Filters</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex-grow w-full">
+  <div class="flex justify-between items-center mb-6">
+    <h2 class="text-2xl font-bold text-slate-900">Available Listings</h2>
+    <span id="roomCount" class="text-sm font-semibold text-slate-500">Loading...</span>
+  </div>
+  <div id="listingsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+</main>
+
+<!-- STEP 1: Landlord details + phone -->
+<div id="addRoomModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 hidden">
+  <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+      <h3 class="text-xl font-bold text-slate-900">List Your Room on Rent A Room</h3>
+      <button onclick="toggleModal('addRoomModal')" class="text-slate-400 hover:text-slate-600 font-bold text-lg">&times;</button>
+    </div>
+
+    <form id="addRoomForm" onsubmit="handleInitialSubmit(event)" class="space-y-4">
+      <div>
+        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Full Name</label>
+        <input type="text" id="ownerName" required class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">SA Phone Number</label>
+        <input type="tel" id="phoneNumber" placeholder="0821234567" required class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Title / Description</label>
+        <input type="text" id="newTitle" required placeholder="e.g. Spacious Ensuite Backroom near Mall" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Suburb</label>
+          <input type="text" id="newSuburb" required placeholder="e.g. Protea Glen Ext 9" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Monthly Rent (ZAR)</label>
+          <input type="number" id="newRent" required min="1" placeholder="2500" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Room Category</label>
+          <select id="newType" onchange="toggleInstitutionField()" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500">
+            <option value="Backroom">Backroom</option>
+            <option value="Garage">Garage</option>
+            <option value="Flatlet">Flatlet</option>
+            <option value="Ensuite">Ensuite</option>
+            <option value="Student Accommodation">Student Accommodation</option>
+            <option value="Apartment">Apartment</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Image URL</label>
+          <input type="url" id="newImage" placeholder="https://..." class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Address</label>
+        <input type="text" id="newAddress" required placeholder="Street / plot" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
+      </div>
+      <div id="institutionField" class="hidden">
+        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Nearby Campus / Institution</label>
+        <input type="text" id="newInstitution" placeholder="e.g. University of Johannesburg, Soweto Campus" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
+      </div>
+      <div>
+        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Amenities (comma separated)</label>
+        <input type="text" id="newAmenities" placeholder="Free WiFi, Prepaid Power, Parking, Near Taxi Rank" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
+      </div>
+
+      <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+        <label class="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" id="hasWhatsapp" checked onchange="updateConsentWarning()" class="rounded" />
+          This number has WhatsApp
+        </label>
+        <label class="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" id="showPhonePublicly" onchange="onPublicToggle()" class="rounded" />
+          Show my phone number directly on the listing (optional)
+        </label>
+        <label id="consentRow" class="hidden items-center gap-2 text-xs text-slate-600 pl-6">
+          <input type="checkbox" id="consentPhonePublic" class="rounded" />
+          I understand and consent to my phone number being publicly visible on the internet on this listing.
+        </label>
+        <p id="noWhatsappWarning" class="hidden text-xs text-amber-600">
+          Since this number doesn't have WhatsApp, tenants will see a "Call" button instead of a WhatsApp button.
+        </p>
+      </div>
+
+      <div id="turnstileContainer" class="cf-turnstile my-2"></div>
+
+      <p id="submit-error" class="hidden text-xs text-red-500"></p>
+      <div class="pt-2 flex justify-end space-x-3">
+        <button type="button" onclick="toggleModal('addRoomModal')" class="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800">Cancel</button>
+        <button type="submit" id="btn-submit" class="bg-brand-500 hover:bg-brand-600 text-white px-5 py-2 rounded-xl text-sm font-semibold shadow">Verify Phone & Continue</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- STEP 2: OTP entry -->
+<div id="otpModal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+  <div class="bg-white border border-slate-200 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl">
+    <h2 class="text-xl font-bold mb-2 text-slate-900">Enter SMS Code</h2>
+    <p class="text-xs text-slate-500 mb-4">Sent to <span id="display-phone" class="text-brand-500 font-mono"></span></p>
+
+    <div class="flex justify-center gap-2 mb-4">
+      <input type="text" inputmode="numeric" maxlength="1" class="otp-box w-10 h-12 text-center text-xl font-bold bg-slate-50 border border-slate-300 rounded-lg focus:border-brand-500 outline-none">
+      <input type="text" inputmode="numeric" maxlength="1" class="otp-box w-10 h-12 text-center text-xl font-bold bg-slate-50 border border-slate-300 rounded-lg focus:border-brand-500 outline-none">
+      <input type="text" inputmode="numeric" maxlength="1" class="otp-box w-10 h-12 text-center text-xl font-bold bg-slate-50 border border-slate-300 rounded-lg focus:border-brand-500 outline-none">
+      <input type="text" inputmode="numeric" maxlength="1" class="otp-box w-10 h-12 text-center text-xl font-bold bg-slate-50 border border-slate-300 rounded-lg focus:border-brand-500 outline-none">
+      <input type="text" inputmode="numeric" maxlength="1" class="otp-box w-10 h-12 text-center text-xl font-bold bg-slate-50 border border-slate-300 rounded-lg focus:border-brand-500 outline-none">
+      <input type="text" inputmode="numeric" maxlength="1" class="otp-box w-10 h-12 text-center text-xl font-bold bg-slate-50 border border-slate-300 rounded-lg focus:border-brand-500 outline-none">
+    </div>
+
+    <p id="otp-error" class="hidden text-xs text-red-500 mb-4"></p>
+    <button onclick="handleVerifyOtp()" id="btn-verify" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold p-3 rounded-lg transition">Verify & Publish</button>
+    <button onclick="toggleModal('otpModal')" class="w-full mt-2 text-xs text-slate-400 hover:text-slate-600">Cancel</button>
+  </div>
+</div>
+
+<!-- DEV HELPER TOAST -->
+<div id="dev-otp-toast" class="hidden fixed bottom-5 right-5 bg-slate-950 border border-amber-500/40 p-4 rounded-2xl shadow-2xl z-50">
+  <div class="text-xs text-amber-400 font-bold mb-1">DEV MODE — OTP INTERCEPTOR</div>
+  <div class="flex items-center gap-3">
+    <span id="dev-otp-code" class="text-xl font-mono text-emerald-400 font-bold">------</span>
+    <button onclick="autofillOtp()" class="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs px-2 py-1 rounded border border-amber-500/30">Auto-fill</button>
+  </div>
+</div>
+
+<footer class="bg-slate-900 text-slate-400 py-8 border-t border-slate-800">
+  <div class="max-w-7xl mx-auto px-4 text-center space-y-2">
+    <p class="font-heading font-extrabold text-white text-lg">Rent A Room</p>
+    <p class="text-xs">Connecting Township Property Owners & Tenants in Soweto & Surrounds.</p>
+    <p class="text-xs text-slate-500">&copy; <span id="copyrightYear"></span> David Rakosa. All rights reserved.</p>
+  </div>
+</footer>
+<script>document.getElementById('copyrightYear').textContent = new Date().getFullYear();</script>
+
+<script>
+let pendingListing = {};
+let currentDevOtp = null;
+let config = { turnstileSiteKey: null, devMode: true };
+let loadDebounceTimer = null;
+
+async function loadConfig() {
+  try {
+    const res = await fetch('/api/config');
+    config = await res.json();
+    if (config.turnstileSiteKey) {
+      document.getElementById('turnstileContainer').setAttribute('data-sitekey', config.turnstileSiteKey);
+    }
+  } catch (e) { /* config is non-critical, fall back to defaults */ }
+}
+
+function debouncedLoad() {
+  clearTimeout(loadDebounceTimer);
+  loadDebounceTimer = setTimeout(loadListings, 350);
+}
+
+async function loadListings() {
+  const grid = document.getElementById('listingsGrid');
+  const countEl = document.getElementById('roomCount');
+  const suburb = document.getElementById('suburbFilter').value.trim();
+  const maxRent = document.getElementById('priceFilter').value;
+  const propertyType = document.getElementById('typeFilter').value;
+
+  const params = new URLSearchParams();
+  if (suburb) params.set('suburb', suburb);
+  if (maxRent) params.set('maxRent', maxRent);
+  if (propertyType && propertyType !== 'All') params.set('propertyType', propertyType);
+
+  try {
+    const res = await fetch('/api/listings?' + params.toString());
+    const data = await res.json();
+    const items = data.listings || [];
+    countEl.innerText = `Showing ${items.length} listing${items.length === 1 ? '' : 's'}`;
+
+    if (items.length === 0) {
+      grid.innerHTML = `<div class="col-span-full text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300 p-8">
+        <p class="text-slate-500 font-semibold">No rooms found matching your filters.</p>
+        <button onclick="resetFilters()" class="mt-3 text-brand-500 font-bold hover:underline">Reset Filters</button>
+      </div>`;
+      return;
+    }
+
+    grid.innerHTML = items.map(room => `
+      <div class="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+        <div>
+          <div class="relative h-48 w-full bg-slate-100 overflow-hidden">
+            <img src="${room.image || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=80'}" alt="${escapeHtml(room.title)}" class="w-full h-full object-cover" />
+            <span class="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-xs text-white text-xs font-bold px-2.5 py-1 rounded-lg">${escapeHtml(room.suburb)}</span>
+            <span class="absolute bottom-3 left-3 bg-brand-500 text-white text-xs font-bold px-2.5 py-1 rounded-lg shadow">${escapeHtml(room.propertyType)}</span>
+          </div>
+          <div class="p-5 space-y-3">
+            <h3 class="font-bold text-slate-900 text-lg leading-snug">${escapeHtml(room.title)}</h3>
+            ${room.nearbyInstitution ? `<div class="text-xs font-semibold text-brand-600 flex items-center gap-1">🎓 ${escapeHtml(room.nearbyInstitution)}</div>` : ''}
+            <div class="text-2xl font-black text-brand-500 font-heading">R${Number(room.monthlyRent).toLocaleString()} <span class="text-xs font-normal text-slate-500">/ month</span></div>
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              ${(room.amenities || []).map(a => `<span class="bg-slate-100 text-slate-700 text-xs font-semibold px-2.5 py-1 rounded-md border border-slate-200">${escapeHtml(a)}</span>`).join('')}
+            </div>
+          </div>
+        </div>
+        <div class="p-5 pt-0 space-y-2">
+          ${room.publicPhone ? `
+            <div class="text-xs text-slate-500 flex items-center justify-between">
+              <span>📞 ${escapeHtml(room.publicPhone)}</span>
+              <span>${room.hasWhatsapp ? 'Has WhatsApp' : 'Call only'}</span>
+            </div>
+          ` : ''}
+          <button onclick="contactLandlord('${room._id}')" class="w-full bg-slate-100 hover:bg-brand-500 hover:text-white text-slate-800 font-bold text-sm py-2.5 rounded-xl transition text-center">Contact Landlord</button>
+          <button onclick="reportListing('${room._id}')" class="w-full text-xs text-slate-400 hover:text-red-500 py-1 transition">Report this listing</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    countEl.innerText = 'Failed to load listings.';
+  }
+}
+
+function escapeHtml(str) {
+  return String(str || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function contactLandlord(id) {
+  try {
+    const res = await fetch(`/api/listings/${id}/contact`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.whatsappLink) {
+      window.open(data.whatsappLink, '_blank');
+    } else if (res.ok && data.callLink) {
+      window.location.href = data.callLink;
+    } else {
+      alert(data.error || 'Could not start a contact request right now.');
+    }
+  } catch (e) {
+    alert('Network error, please try again.');
+  }
+}
+
+async function reportListing(id) {
+  if (!confirm('Report this listing as suspicious or a scam? Our admin will review it.')) return;
+  try {
+    const res = await fetch(`/api/listings/${id}/report`, { method: 'POST' });
+    const data = await res.json();
+    alert(data.message || (res.ok ? 'Reported.' : 'Could not submit the report right now.'));
+  } catch (e) {
+    alert('Network error, please try again.');
+  }
+}
+
+function resetFilters() {
+  document.getElementById('suburbFilter').value = '';
+  document.getElementById('priceFilter').value = '';
+  document.getElementById('typeFilter').value = 'All';
+  loadListings();
+}
+
+function toggleInstitutionField() {
+  const isStudent = document.getElementById('newType').value === 'Student Accommodation';
+  document.getElementById('institutionField').classList.toggle('hidden', !isStudent);
+}
+
+function onPublicToggle() {
+  const show = document.getElementById('showPhonePublicly').checked;
+  const consentRow = document.getElementById('consentRow');
+  consentRow.classList.toggle('hidden', !show);
+  consentRow.classList.toggle('flex', show);
+  if (!show) document.getElementById('consentPhonePublic').checked = false;
+  updateConsentWarning();
+}
+
+function updateConsentWarning() {
+  const hasWhatsapp = document.getElementById('hasWhatsapp').checked;
+  const showPublicly = document.getElementById('showPhonePublicly').checked;
+  document.getElementById('noWhatsappWarning').classList.toggle('hidden', hasWhatsapp || !showPublicly);
+}
+
+function toggleModal(id) {
+  document.getElementById(id).classList.toggle('hidden');
+}
+
+async function handleInitialSubmit(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('submit-error');
+  errEl.classList.add('hidden');
+
+  pendingListing = {
+    fullName: document.getElementById('ownerName').value,
+    phone: document.getElementById('phoneNumber').value,
+    title: document.getElementById('newTitle').value,
+    suburb: document.getElementById('newSuburb').value,
+    address: document.getElementById('newAddress').value,
+    monthlyRent: Number(document.getElementById('newRent').value),
+    propertyType: document.getElementById('newType').value,
+    image: document.getElementById('newImage').value,
+    nearbyInstitution: document.getElementById('newInstitution').value,
+    amenities: document.getElementById('newAmenities').value
+      ? document.getElementById('newAmenities').value.split(',').map(a => a.trim()).filter(Boolean)
+      : [],
+    hasWhatsapp: document.getElementById('hasWhatsapp').checked,
+    showPhonePublicly: document.getElementById('showPhonePublicly').checked,
+    consentPhonePublic: document.getElementById('consentPhonePublic').checked
+  };
+
+  if (pendingListing.showPhonePublicly && !pendingListing.consentPhonePublic) {
+    errEl.innerText = 'Please tick the consent box to show your number publicly, or leave that option off.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const turnstileToken = document.querySelector('[name="cf-turnstile-response"]')?.value;
+  if (config.turnstileSiteKey && !turnstileToken) {
+    errEl.innerText = 'Please complete the security check.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const res = await fetch('/api/auth/request-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      phone: pendingListing.phone,
+      fullName: pendingListing.fullName,
+      turnstileToken,
+      hasWhatsapp: pendingListing.hasWhatsapp,
+      showPhonePublicly: pendingListing.showPhonePublicly,
+      consentPhonePublic: pendingListing.consentPhonePublic
+    })
+  });
+  const data = await res.json();
+
+  if (!res.ok) {
+    errEl.innerText = data.error || 'Something went wrong.';
+    errEl.classList.remove('hidden');
+    if (window.turnstile) turnstile.reset();
+    return;
+  }
+
+  document.getElementById('display-phone').innerText = pendingListing.phone;
+  toggleModal('addRoomModal');
+  toggleModal('otpModal');
+  document.querySelectorAll('.otp-box').forEach(b => b.value = '');
+  setupOtpFocus();
+
+  if (data.devOtp) {
+    currentDevOtp = data.devOtp;
+    document.getElementById('dev-otp-code').innerText = data.devOtp;
+    document.getElementById('dev-otp-toast').classList.remove('hidden');
+  }
+}
+
+function setupOtpFocus() {
+  const boxes = document.querySelectorAll('.otp-box');
+  boxes.forEach((box, idx) => {
+    box.addEventListener('keyup', (e) => {
+      if (e.key >= '0' && e.key <= '9' && idx < boxes.length - 1) boxes[idx + 1].focus();
+      if (e.key === 'Backspace' && idx > 0) boxes[idx - 1].focus();
+    });
+  });
+  boxes[0].focus();
+}
+
+function autofillOtp() {
+  if (!currentDevOtp) return;
+  const boxes = document.querySelectorAll('.otp-box');
+  currentDevOtp.split('').forEach((digit, i) => { if (boxes[i]) boxes[i].value = digit; });
+}
+
+async function handleVerifyOtp() {
+  const boxes = document.querySelectorAll('.otp-box');
+  const code = Array.from(boxes).map(b => b.value).join('');
+  const errEl = document.getElementById('otp-error');
+
+  const verifyRes = await fetch('/api/auth/verify-otp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone: pendingListing.phone, code })
+  });
+  const verifyData = await verifyRes.json();
+
+  if (!verifyRes.ok) {
+    errEl.innerText = verifyData.error;
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const listRes = await fetch('/api/listings/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: pendingListing.title,
+      suburb: pendingListing.suburb,
+      address: pendingListing.address,
+      monthlyRent: pendingListing.monthlyRent,
+      propertyType: pendingListing.propertyType,
+      amenities: pendingListing.amenities,
+      nearbyInstitution: pendingListing.nearbyInstitution,
+      image: pendingListing.image
+    })
+  });
+  const listData = await listRes.json();
+
+  if (!listRes.ok) {
+    errEl.innerText = listData.error || 'Could not publish listing.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  document.getElementById('dev-otp-toast').classList.add('hidden');
+  toggleModal('otpModal');
+  document.getElementById('addRoomForm').reset();
+  alert('Success! Your listing was submitted and is pending review before it goes live.');
+}
+
+loadConfig();
+loadListings();
+</script>
+</body>
+</html>

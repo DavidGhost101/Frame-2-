@@ -1,0 +1,6 @@
+{
+  "name": "Rent A Room",
+  "description": "Township room and backroom listing platform for Soweto and surrounds with SMS OTP verified landlords",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en-ZA">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Rent A Room | Admin</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>body{font-family:system-ui,sans-serif;background:#0f172a;}</style>
+</head>
+<body class="min-h-screen text-slate-100">
+
+<div id="loginScreen" class="min-h-screen flex items-center justify-center p-4">
+  <div class="bg-slate-800 border border-slate-700 rounded-2xl p-8 max-w-sm w-full">
+    <h1 class="text-xl font-bold mb-1">Rent A Room Admin</h1>
+    <p class="text-xs text-slate-400 mb-5">Enter your admin key to continue.</p>
+    <form onsubmit="login(event)" class="space-y-3">
+      <input type="password" id="adminKeyInput" placeholder="Admin key" required class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm outline-none focus:border-rose-500" />
+      <p id="loginError" class="hidden text-xs text-red-400"></p>
+      <button type="submit" class="w-full bg-rose-500 hover:bg-rose-600 font-bold p-3 rounded-lg transition">Sign In</button>
+    </form>
+  </div>
+</div>
+
+<div id="dashboard" class="hidden max-w-6xl mx-auto p-4 sm:p-6">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold">Rent A Room <span class="text-rose-500">Admin</span></h1>
+    <button onclick="logout()" class="text-xs text-slate-400 hover:text-white">Log out</button>
+  </div>
+
+  <div id="statsGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-6"></div>
+
+  <div class="flex gap-2 mb-4 border-b border-slate-700 text-sm">
+    <button onclick="switchTab('listings')" id="tab-listings" class="px-4 py-2 font-semibold border-b-2 border-rose-500 text-white">Listings</button>
+    <button onclick="switchTab('landlords')" id="tab-landlords" class="px-4 py-2 font-semibold border-b-2 border-transparent text-slate-400">Landlords</button>
+  </div>
+
+  <div id="listingsPanel">
+    <div class="flex gap-2 mb-4 flex-wrap">
+      <select id="statusFilter" onchange="loadListings()" class="bg-slate-800 border border-slate-700 rounded-lg p-2 text-sm">
+        <option value="All">All statuses</option>
+        <option value="pending_review">Pending review</option>
+        <option value="active">Active</option>
+        <option value="rejected">Rejected</option>
+      </select>
+      <button onclick="toggleFlaggedOnly()" id="flaggedToggleBtn" class="text-sm bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 hover:border-red-500">🚩 Flagged only</button>
+      <button onclick="toggleModal('importModal')" class="text-sm bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 hover:border-rose-500 ml-auto">+ Bulk import listings</button>
+    </div>
+    <div id="listingsTable" class="space-y-2"></div>
+  </div>
+
+  <div id="landlordsPanel" class="hidden">
+    <div id="landlordsTable" class="space-y-2"></div>
+  </div>
+</div>
+
+<!-- Edit modal -->
+<div id="editModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+  <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-lg w-full max-h-[85vh] overflow-y-auto">
+    <h3 class="text-lg font-bold mb-4">Edit Listing</h3>
+    <form onsubmit="saveEdit(event)" class="space-y-3">
+      <input type="hidden" id="editId" />
+      <div><label class="block text-xs uppercase text-slate-400 mb-1">Title</label><input id="editTitle" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm" /></div>
+      <div class="grid grid-cols-2 gap-2">
+        <div><label class="block text-xs uppercase text-slate-400 mb-1">Suburb</label><input id="editSuburb" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm" /></div>
+        <div><label class="block text-xs uppercase text-slate-400 mb-1">Rent (ZAR)</label><input id="editRent" type="number" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm" /></div>
+      </div>
+      <div><label class="block text-xs uppercase text-slate-400 mb-1">Status</label>
+        <select id="editStatus" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm">
+          <option value="pending_review">Pending review</option>
+          <option value="active">Active</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" onclick="toggleModal('editModal')" class="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-rose-500 hover:bg-rose-600 rounded-lg text-sm font-semibold">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Bulk import modal -->
+<div id="importModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50">
+  <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-2xl w-full max-h-[85vh] overflow-y-auto">
+    <h3 class="text-lg font-bold mb-2">Bulk Import Listings</h3>
+    <p class="text-xs text-slate-400 mb-4">
+      Paste listings you've personally reviewed (e.g. copied from a Facebook group post) as a JSON array.
+      Each entry needs: title, suburb, address, monthlyRent, landlordFullName, landlordPhone.
+      Optional: propertyType, amenities (array), image, nearbyInstitution.
+      These go live immediately since you're vouching for them.
+    </p>
+    <textarea id="importJson" rows="10" placeholder='[
+  {
+    "title": "Backroom near taxi rank",
+    "suburb": "Dobsonville",
+    "address": "Example St",
+    "monthlyRent": 2200,
+    "propertyType": "Backroom",
+    "landlordFullName": "Jane Doe",
+    "landlordPhone": "+27821234567"
+  }
+]' class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-xs font-mono"></textarea>
+    <p id="importError" class="hidden text-xs text-red-400 mt-2"></p>
+    <div id="importResults" class="mt-3 space-y-1 text-xs"></div>
+    <div class="flex justify-end gap-2 pt-4">
+      <button type="button" onclick="toggleModal('importModal')" class="px-4 py-2 text-sm text-slate-400 hover:text-white">Close</button>
+      <button onclick="runImport()" class="px-4 py-2 bg-rose-500 hover:bg-rose-600 rounded-lg text-sm font-semibold">Import</button>
+    </div>
+  </div>
+</div>
+
+<script>
+async function login(e) {
+  e.preventDefault();
+  const errEl = document.getElementById('loginError');
+  const res = await fetch('/api/admin/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ adminKey: document.getElementById('adminKeyInput').value })
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    errEl.innerText = data.error;
+    errEl.classList.remove('hidden');
+    return;
+  }
+  enterDashboard();
+}
+
+async function checkSession() {
+  const res = await fetch('/api/admin/session');
+  if (res.ok) enterDashboard();
+}
+
+function enterDashboard() {
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('dashboard').classList.remove('hidden');
+  loadStats();
+  loadListings();
+}
+
+async function logout() {
+  await fetch('/api/admin/logout', { method: 'POST' });
+  document.getElementById('dashboard').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+}
+
+function switchTab(tab) {
+  document.getElementById('listingsPanel').classList.toggle('hidden', tab !== 'listings');
+  document.getElementById('landlordsPanel').classList.toggle('hidden', tab !== 'landlords');
+  document.getElementById('tab-listings').classList.toggle('border-rose-500', tab === 'listings');
+  document.getElementById('tab-listings').classList.toggle('text-white', tab === 'listings');
+  document.getElementById('tab-listings').classList.toggle('border-transparent', tab !== 'listings');
+  document.getElementById('tab-listings').classList.toggle('text-slate-400', tab !== 'listings');
+  document.getElementById('tab-landlords').classList.toggle('border-rose-500', tab === 'landlords');
+  document.getElementById('tab-landlords').classList.toggle('text-white', tab === 'landlords');
+  document.getElementById('tab-landlords').classList.toggle('border-transparent', tab !== 'landlords');
+  document.getElementById('tab-landlords').classList.toggle('text-slate-400', tab !== 'landlords');
+  if (tab === 'landlords') loadLandlords();
+}
+
+async function loadStats() {
+  const res = await fetch('/api/admin/stats');
+  if (!res.ok) return;
+  const { stats } = await res.json();
+  document.getElementById('statsGrid').innerHTML = `
+    ${statCard('Active listings', stats.listings.active)}
+    ${statCard('Pending review', stats.listings.pending)}
+    ${statCard('🚩 Flagged', stats.listings.flagged)}
+    ${statCard('Landlords', stats.landlords.total)}
+    ${statCard('Paid subscribers', stats.landlords.paid)}
+    ${statCard('Contact clicks', stats.totalContactClicks)}
+  `;
+}
+
+function statCard(label, value) {
+  return `<div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+    <div class="text-2xl font-bold">${value}</div>
+    <div class="text-xs text-slate-400">${label}</div>
+  </div>`;
+}
+
+let showFlaggedOnly = false;
+
+function toggleFlaggedOnly() {
+  showFlaggedOnly = !showFlaggedOnly;
+  document.getElementById('flaggedToggleBtn').classList.toggle('border-red-500', showFlaggedOnly);
+  document.getElementById('flaggedToggleBtn').classList.toggle('text-red-400', showFlaggedOnly);
+  loadListings();
+}
+
+async function loadListings() {
+  const status = document.getElementById('statusFilter').value;
+  const params = new URLSearchParams({ status });
+  if (showFlaggedOnly) params.set('flagged', 'true');
+  const res = await fetch('/api/admin/listings?' + params.toString());
+  const { listings } = await res.json();
+  const table = document.getElementById('listingsTable');
+
+  if (!listings.length) {
+    table.innerHTML = `<p class="text-sm text-slate-400 py-6 text-center">No listings here.</p>`;
+    return;
+  }
+
+  table.innerHTML = listings.map(l => `
+    <div class="bg-slate-800 border ${l.flagged ? 'border-red-600' : 'border-slate-700'} rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+      <div>
+        <div class="font-semibold">${l.flagged ? '🚩 ' : ''}${escapeHtml(l.title)} <span class="text-xs font-normal text-slate-400">— ${escapeHtml(l.suburb)}, R${l.monthlyRent}</span></div>
+        <div class="text-xs text-slate-400">${escapeHtml(l.landlordId?.fullName || 'Unknown')} · ${escapeHtml(l.landlordId?.phone || '')} · <span class="uppercase">${l.status}</span> · ${l.source === 'admin_import' ? 'Admin import' : 'Landlord posted'}</div>
+        ${l.flagged && l.flagReasons?.length ? `<div class="text-xs text-red-400 mt-1">${l.flagReasons.map(escapeHtml).join(' · ')}</div>` : ''}
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        ${l.status !== 'active' ? `<button onclick="setStatus('${l._id}','active')" class="text-xs bg-emerald-600 hover:bg-emerald-700 px-3 py-1.5 rounded-lg">Approve</button>` : ''}
+        ${l.status !== 'rejected' ? `<button onclick="setStatus('${l._id}','rejected')" class="text-xs bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg">Reject</button>` : ''}
+        ${l.flagged ? `<button onclick="clearFlag('${l._id}')" class="text-xs bg-slate-600 hover:bg-slate-500 px-3 py-1.5 rounded-lg">Clear flag</button>` : ''}
+        <button onclick="openEdit('${l._id}','${escapeAttr(l.title)}','${escapeAttr(l.suburb)}',${l.monthlyRent},'${l.status}')" class="text-xs bg-slate-600 hover:bg-slate-500 px-3 py-1.5 rounded-lg">Edit</button>
+        <button onclick="deleteListing('${l._id}')" class="text-xs bg-red-700 hover:bg-red-800 px-3 py-1.5 rounded-lg">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function clearFlag(id) {
+  await fetch(`/api/admin/listings/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ flagged: false }) });
+  loadListings();
+  loadStats();
+}
+
+async function runImport() {
+  const errEl = document.getElementById('importError');
+  const resultsEl = document.getElementById('importResults');
+  errEl.classList.add('hidden');
+  resultsEl.innerHTML = '';
+
+  let parsed;
+  try {
+    parsed = JSON.parse(document.getElementById('importJson').value);
+  } catch (e) {
+    errEl.innerText = 'That is not valid JSON. Check for missing commas or quotes.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const res = await fetch('/api/admin/listings/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ listings: parsed })
+  });
+  const data = await res.json();
+
+  if (!res.ok) {
+    errEl.innerText = data.error || 'Import failed.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  resultsEl.innerHTML = data.results.map(r =>
+    `<div class="${r.success ? 'text-emerald-400' : 'text-red-400'}">${r.success ? '✓' : '✗'} ${escapeHtml(r.title)}${r.error ? ' — ' + escapeHtml(r.error) : ''}</div>`
+  ).join('');
+
+  loadListings();
+  loadStats();
+}
+
+async function loadLandlords() {
+  const res = await fetch('/api/admin/landlords');
+  const { landlords } = await res.json();
+  const table = document.getElementById('landlordsTable');
+
+  const now = Date.now();
+  table.innerHTML = landlords.map(l => {
+    const trialActive = new Date(l.trialEndsAt).getTime() > now;
+    const billingLabel = l.isPaidSubscriber
+      ? '<span class="text-emerald-400">Paid</span>'
+      : (trialActive ? `Free trial until ${new Date(l.trialEndsAt).toLocaleDateString()}` : '<span class="text-amber-400">Trial ended</span>');
+
+    return `
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+      <div>
+        <div class="font-semibold">${escapeHtml(l.fullName)} <span class="text-xs font-normal text-slate-400">${l.phone}</span></div>
+        <div class="text-xs text-slate-400">${l.listingCount} listing${l.listingCount === 1 ? '' : 's'} · ${l.isPhoneVerified ? 'Verified' : 'Unverified'} · ${billingLabel} ${l.isBlocked ? '· <span class="text-red-400">Blocked</span>' : ''}</div>
+      </div>
+      <div class="flex gap-2 flex-wrap">
+        <button onclick="togglePaid('${l._id}', ${!l.isPaidSubscriber})" class="text-xs px-3 py-1.5 rounded-lg ${l.isPaidSubscriber ? 'bg-slate-600 hover:bg-slate-500' : 'bg-emerald-600 hover:bg-emerald-700'}">
+          ${l.isPaidSubscriber ? 'Remove paid status' : 'Mark as paid'}
+        </button>
+        <button onclick="toggleBlock('${l._id}', ${!l.isBlocked})" class="text-xs px-3 py-1.5 rounded-lg ${l.isBlocked ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-700 hover:bg-red-800'}">
+          ${l.isBlocked ? 'Unblock' : 'Block'}
+        </button>
+      </div>
+    </div>
+  `;
+  }).join('') || `<p class="text-sm text-slate-400 py-6 text-center">No landlords yet.</p>`;
+}
+
+async function togglePaid(id, isPaidSubscriber) {
+  await fetch(`/api/admin/landlords/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isPaidSubscriber }) });
+  loadLandlords();
+  loadStats();
+}
+
+async function setStatus(id, status) {
+  await fetch(`/api/admin/listings/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) });
+  loadListings();
+  loadStats();
+}
+
+async function deleteListing(id) {
+  if (!confirm('Delete this listing permanently?')) return;
+  await fetch(`/api/admin/listings/${id}`, { method: 'DELETE' });
+  loadListings();
+  loadStats();
+}
+
+async function toggleBlock(id, isBlocked) {
+  await fetch(`/api/admin/landlords/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isBlocked }) });
+  loadLandlords();
+}
+
+function openEdit(id, title, suburb, rent, status) {
+  document.getElementById('editId').value = id;
+  document.getElementById('editTitle').value = title;
+  document.getElementById('editSuburb').value = suburb;
+  document.getElementById('editRent').value = rent;
+  document.getElementById('editStatus').value = status;
+  toggleModal('editModal');
+}
+
+async function saveEdit(e) {
+  e.preventDefault();
+  const id = document.getElementById('editId').value;
+  await fetch(`/api/admin/listings/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      title: document.getElementById('editTitle').value,
+      suburb: document.getElementById('editSuburb').value,
+      monthlyRent: Number(document.getElementById('editRent').value),
+      status: document.getElementById('editStatus').value
+    })
+  });
+  toggleModal('editModal');
+  loadListings();
+  loadStats();
+}
+
+function toggleModal(id) { document.getElementById(id).classList.toggle('hidden'); }
+function escapeHtml(str) { return String(str || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function escapeAttr(str) { return String(str || '').replace(/'/g, "\\'"); }
+
+checkSession();
+</script>
+</body>
+</html>
