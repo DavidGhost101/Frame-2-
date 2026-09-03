@@ -9,24 +9,31 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/style.css">
 <script>
+  // Ensure dark class and theme cache are completely cleared so all text renders with crisp, dark contrast
+  try {
+    document.documentElement.classList.remove('dark');
+    localStorage.removeItem('rentaroom_theme');
+  } catch (_) {}
+</script>
+<script src="/js/phoneUtils.js"></script>
+
+<script>
   // Robust global error suppression for cross-origin third-party script events & unhandled rejections
   window.onerror = function(message, source, lineno, colno, error) {
     const msg = String(message || '');
     if (msg === 'Script error.' || msg.toLowerCase().includes('script error') || !source || lineno === 0 || (source && !source.includes(window.location.host))) {
       return true; // Prevents the error from propagating to browser error monitors
     }
-    return false;
+    return true; // Handle all unhandled top-level errors cleanly without bubbling Script error
   };
   window.addEventListener('error', function(event) {
-    const msg = String(event.message || '');
-    if (msg === 'Script error.' || msg.toLowerCase().includes('script error') || !event.filename || event.lineno === 0 || (event.filename && !event.filename.includes(window.location.host))) {
+    if (event) {
       if (typeof event.preventDefault === 'function') event.preventDefault();
       if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
     }
   }, true);
   window.addEventListener('unhandledrejection', function(event) {
-    const reasonMsg = event && event.reason ? String(event.reason.message || event.reason) : '';
-    if (reasonMsg === 'Script error.' || reasonMsg.toLowerCase().includes('script error')) {
+    if (event) {
       if (typeof event.preventDefault === 'function') event.preventDefault();
       if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
     }
@@ -44,7 +51,7 @@
   .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 </style>
 </head>
-<body class="antialiased min-h-screen flex flex-col justify-between bg-slate-50 text-slate-900 selection:bg-rose-500 selection:text-white">
+<body class="antialiased min-h-screen flex flex-col justify-between bg-slate-50 text-slate-900 selection:bg-rose-500 selection:text-white pb-20 sm:pb-0">
 
 <!-- GLOBAL TOAST NOTIFICATION CONTAINER -->
 <div id="toast-container" class="fixed top-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
@@ -64,22 +71,27 @@
       </div>
     </div>
 
-    <!-- Quick Actions Header -->
-    <div class="flex items-center gap-1.5 sm:gap-2.5">
+    <!-- Quick Actions Header (Hidden on screen width below 640px) -->
+    <div class="hidden sm:flex items-center gap-1.5 sm:gap-2">
+      <!-- Safety & Scam Warning Guide Button -->
+      <button onclick="toggleModal('safetyGuideModal')" title="Safety & Scam Prevention Tips" class="flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition cursor-pointer">
+        <span>🛡️ Safety Tips</span>
+      </button>
+
       <!-- Affordability Calculator Button -->
-      <button onclick="toggleModal('calculatorModal')" title="Rent & Deposit Calculator" class="hidden md:flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition border border-slate-200 cursor-pointer">
-        <span>🧮 Budget Calc</span>
+      <button onclick="toggleModal('calculatorModal')" title="Rent & Deposit Calculator" class="hidden md:flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition border border-slate-200 cursor-pointer">
+        <span>🧮 Budget</span>
       </button>
 
       <!-- Saved Favorites Button -->
-      <button onclick="toggleFavoritesView()" id="btnSavedRooms" title="Saved Favorites" class="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition border border-slate-200 cursor-pointer">
+      <button onclick="toggleFavoritesView()" id="btnSavedRooms" title="Saved Favorites" class="flex items-center gap-1.5 px-2.5 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition border border-slate-200 cursor-pointer">
         <span id="savedHeartIcon">❤️</span>
-        <span class="hidden sm:inline">Saved</span>
+        <span class="hidden lg:inline">Saved</span>
         <span id="savedCountBadge" class="bg-rose-500 text-white rounded-full px-1.5 py-0.2 text-[10px] font-black hidden">0</span>
       </button>
 
       <!-- Post Seeker Request Button -->
-      <button onclick="toggleModal('addSeekerModal')" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm px-3 sm:px-3.5 py-2 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer">
+      <button onclick="openSeekerModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm px-3 sm:px-3.5 py-2 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
         <span>Need Room?</span>
       </button>
@@ -90,17 +102,23 @@
         <span>List Room</span>
       </button>
     </div>
+
+    <!-- Mobile Quick Header Actions (< 640px) -->
+    <div class="flex sm:hidden items-center gap-1.5">
+      <button onclick="openSeekerModal()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-2.5 py-2 rounded-xl transition shadow-xs flex items-center gap-1 cursor-pointer">
+        <span>Need Room?</span>
+      </button>
+      <button onclick="toggleModal('addRoomModal')" class="bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs px-2.5 py-2 rounded-xl transition shadow-xs flex items-center gap-1 cursor-pointer">
+        <span>List Room</span>
+      </button>
+    </div>
   </div>
 </header>
+
 
 <!-- HERO SECTION & CONTROLS -->
 <section class="bg-gradient-to-b from-brand-50 via-white to-slate-50 pt-8 pb-10 px-4 border-b border-slate-200/80">
   <div class="max-w-4xl mx-auto text-center space-y-4">
-    <!-- Subtitle Pill -->
-    <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-brand-100 text-brand-700 text-xs font-extrabold uppercase tracking-wider border border-brand-200/60">
-      <span>🇿🇦 Soweto's #1 Verified Room & Tenant Hub • Done by David Rakosa</span>
-    </div>
-
     <!-- Main Title -->
     <h1 class="text-3xl sm:text-5xl font-black text-slate-900 tracking-tight font-heading leading-tight">
       Find Rooms to Rent or <span class="text-brand-500">Connect with Tenants</span>
@@ -113,13 +131,16 @@
     <!-- TAB SWITCHER -->
     <div class="pt-2 flex justify-center">
       <div class="inline-flex p-1.5 bg-slate-200/80 rounded-2xl border border-slate-300 shadow-inner flex-wrap justify-center gap-1">
-        <button id="tabBtnListings" onclick="switchTab('listings')" class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs bg-white text-slate-900 flex items-center gap-2 cursor-pointer">
+        <button id="tabBtnListings" onclick="switchTab('listings')" class="px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs bg-white text-slate-900 flex items-center gap-2 cursor-pointer">
           <span>🏠 Available Rooms</span>
           <span id="tabCountListings" class="px-2 py-0.5 bg-slate-100 text-slate-600 text-[11px] rounded-full font-bold">...</span>
         </button>
-        <button id="tabBtnSeekers" onclick="switchTab('seekers')" class="px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900 flex items-center gap-2 cursor-pointer">
+        <button id="tabBtnSeekers" onclick="switchTab('seekers')" class="px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900 flex items-center gap-2 cursor-pointer">
           <span>🙋 Tenants Looking</span>
           <span id="tabCountSeekers" class="px-2 py-0.5 bg-slate-200 text-slate-700 text-[11px] rounded-full font-bold">...</span>
+        </button>
+        <button id="tabBtnAiChat" onclick="switchTab('aichat')" class="px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900 flex items-center gap-2 cursor-pointer">
+          <span>🤖 AI Housing Advisor</span>
         </button>
       </div>
     </div>
@@ -217,6 +238,33 @@
 
   <!-- VIEW 1: AVAILABLE ROOM LISTINGS GRID -->
   <section id="listingsView">
+    <!-- PROMINENT SCAM WARNING & SAFETY INSTRUCTIONS BANNER -->
+    <div class="mb-6 p-4 sm:p-5 rounded-2xl bg-amber-50/90 border-2 border-amber-300 text-amber-950 shadow-xs">
+      <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div class="flex items-start gap-3.5">
+          <div class="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-bold text-xl shrink-0 shadow-xs">
+            🛡️
+          </div>
+          <div class="space-y-1">
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="font-extrabold text-slate-900 text-sm sm:text-base font-heading">
+                ⚠️ Scam Warning & Safety Instructions: Protect Yourself Before You Pay
+              </h3>
+              <span class="text-[10px] bg-red-100 text-red-800 border border-red-200 font-black px-2 py-0.5 rounded-full uppercase tracking-wider">Crucial Advice</span>
+            </div>
+            <p class="text-xs text-amber-950 font-medium leading-relaxed">
+              <strong>1. Always call and verify:</strong> Call the landlord directly to verify property details before heading out.<br class="hidden sm:inline" />
+              <strong>2. Never pay upfront money:</strong> Do not send e-Wallets, holding fees, or viewing deposits before seeing the place.<br class="hidden sm:inline" />
+              <strong>3. Always visit with 1 or 2 people:</strong> Bring friends or family members with you when viewing accommodation for personal safety.
+            </p>
+          </div>
+        </div>
+        <button onclick="toggleModal('safetyGuideModal')" class="shrink-0 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+          <span>📖 Full Safety Guide</span>
+        </button>
+      </div>
+    </div>
+
     <!-- Section Header & Controls -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
       <div>
@@ -469,7 +517,13 @@
             🤍
           </button>
         </div>
-        <p id="detailAddress" class="text-xs text-slate-500 font-semibold mt-1 flex items-center gap-1">📍 <span></span></p>
+        <div class="flex flex-wrap items-center justify-between gap-2 mt-2">
+          <p id="detailAddress" class="text-xs text-slate-500 font-semibold flex items-center gap-1">📍 <span></span></p>
+          <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700">
+            <span>🗓️</span>
+            <span>Listed: <strong id="detailListedDateVal" class="text-slate-900 font-bold">Recently</strong></span>
+          </div>
+        </div>
       </div>
 
       <!-- Pricing Breakdown -->
@@ -508,28 +562,156 @@
           </div>
           <div>
             <div class="text-sm font-bold text-slate-900 flex items-center gap-1">
-              <span>Verified Township Landlord</span>
-              <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">OTP Verified</span>
+              <span>Township Landlord Contact</span>
+              <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">Direct Contact</span>
             </div>
-            <p id="detailPhoneDisplay" class="text-xs text-slate-500 font-medium">Direct WhatsApp connection enabled</p>
+            <p id="detailPhoneDisplay" class="text-xs text-slate-500 font-medium">Direct WhatsApp & in-platform messaging enabled</p>
           </div>
         </div>
       </div>
 
+      <!-- CRITICAL SCAM WARNING & SAFE VIEWING CHECKLIST -->
+      <div class="p-4 bg-amber-50/90 border-2 border-amber-300 rounded-2xl space-y-2.5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2 text-amber-950 font-black text-xs uppercase tracking-wide">
+            <span class="text-base">🛡️</span>
+            <span>Important Safety & Scam Warning</span>
+          </div>
+          <span class="text-[10px] font-black uppercase text-red-800 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">Safety First</span>
+        </div>
+        <ul class="text-xs text-amber-950 font-medium space-y-1.5 leading-relaxed">
+          <li class="flex items-start gap-2">
+            <span class="text-amber-700 font-black">📞</span>
+            <span><strong>Always call the landlord:</strong> Talk directly to confirm room availability and ask clarifying questions before traveling.</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-amber-700 font-black">🚫</span>
+            <span><strong>Never pay money upfront:</strong> Do not send e-Wallets, viewing fees, or holding deposits before inspecting the room in person.</span>
+          </li>
+          <li class="flex items-start gap-2">
+            <span class="text-amber-700 font-black">👥</span>
+            <span><strong>Visit with 1 or 2 people:</strong> Always take 1 or 2 friends or family members with you when visiting the accommodation to view it.</span>
+          </li>
+        </ul>
+      </div>
+
       <!-- Action & Close Buttons -->
-      <div class="pt-3 flex flex-col sm:flex-row gap-2.5 border-t border-slate-100">
-        <button id="detailWhatsappBtn" onclick="contactLandlordDirect()" class="flex-1 bg-slate-900 hover:bg-brand-500 text-white font-bold text-sm py-3 px-4 rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer">
-          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
-          <span>Chat on WhatsApp</span>
+      <div class="pt-3 flex flex-col gap-2.5 border-t border-slate-100">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <button id="detailChatBtn" onclick="openChatWithLandlord(activeDetailListing ? activeDetailListing._id : null)" class="bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm py-3 px-4 rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer">
+            <span>💬</span>
+            <span>Chat with Landlord</span>
+          </button>
+          <button id="detailWhatsappBtn" onclick="contactLandlordDirect()" class="bg-slate-900 hover:bg-emerald-600 text-white font-bold text-sm py-3 px-4 rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+            <span>Chat on WhatsApp</span>
+          </button>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="detailShareBtn" onclick="openShareModal(activeDetailListing ? activeDetailListing._id : null)" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs sm:text-sm py-2.5 px-4 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer">
+            <span>📤 Share Room</span>
+          </button>
+          <button onclick="closeRoomDetailModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs sm:text-sm py-2.5 px-5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer" title="Close window">
+            <span>✕ Close</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: CHAT WITH LANDLORD (IN-PLATFORM MESSAGING) -->
+<div id="landlordChatModal" class="modal-backdrop fixed inset-0 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4 z-50 hidden" onclick="handleBackdropClick(event, 'landlordChatModal')">
+  <div class="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden relative" onclick="event.stopPropagation()">
+    <!-- Chat Header -->
+    <div class="p-4 sm:p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-11 h-11 rounded-2xl bg-rose-500 text-white flex items-center justify-center font-black text-lg shadow-sm">
+          💬
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <h3 id="chatLandlordName" class="font-extrabold text-slate-900 text-base font-heading">Chat with Landlord</h3>
+            <span class="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full">✓ Verified</span>
+          </div>
+          <p id="chatListingSubtitle" class="text-xs text-slate-500 font-medium line-clamp-1">Direct in-platform inquiry</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button onclick="contactLandlordDirect()" title="Switch to WhatsApp" class="p-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold transition flex items-center gap-1 cursor-pointer">
+          <span>📱</span>
+          <span class="hidden sm:inline">WhatsApp</span>
         </button>
-        <button id="detailShareBtn" onclick="openShareModal(activeDetailListing ? activeDetailListing._id : null)" class="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-sm py-3 px-4 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer">
-          <span>📤 Share Room</span>
-        </button>
-        <button onclick="closeRoomDetailModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-sm py-3 px-5 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer" title="Close window">
-          <span>✕ Close</span>
+        <button onclick="toggleModal('landlordChatModal')" class="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-sm transition cursor-pointer">
+          ✕
         </button>
       </div>
     </div>
+
+    <!-- Safety Warning Reminder in Chat -->
+    <div class="px-4 py-2 bg-amber-50 border-b border-amber-100 text-[11px] text-amber-900 flex items-center gap-1.5">
+      <span>🛡️</span>
+      <span><strong>Safety Reminder:</strong> Never send deposit before physically inspecting the room.</span>
+    </div>
+
+    <!-- Quick Inquiry Chips -->
+    <div class="px-4 py-2.5 bg-slate-50/70 border-b border-slate-100 overflow-x-auto flex items-center gap-2 text-xs no-scrollbar">
+      <span class="text-slate-400 font-semibold text-[10px] uppercase shrink-0">Suggestions:</span>
+      <button type="button" onclick="insertQuickMessage('Is this room still available?')" class="px-3 py-1 rounded-full bg-white hover:bg-rose-50 border border-slate-200 text-slate-700 hover:text-rose-600 hover:border-rose-200 text-[11px] font-medium shrink-0 transition cursor-pointer">
+        Is it available?
+      </button>
+      <button type="button" onclick="insertQuickMessage('When can I arrange an in-person viewing?')" class="px-3 py-1 rounded-full bg-white hover:bg-rose-50 border border-slate-200 text-slate-700 hover:text-rose-600 hover:border-rose-200 text-[11px] font-medium shrink-0 transition cursor-pointer">
+        Arrange viewing
+      </button>
+      <button type="button" onclick="insertQuickMessage('Is deposit required before move-in?')" class="px-3 py-1 rounded-full bg-white hover:bg-rose-50 border border-slate-200 text-slate-700 hover:text-rose-600 hover:border-rose-200 text-[11px] font-medium shrink-0 transition cursor-pointer">
+        Deposit details
+      </button>
+      <button type="button" onclick="insertQuickMessage('Is parking space available in the yard?')" class="px-3 py-1 rounded-full bg-white hover:bg-rose-50 border border-slate-200 text-slate-700 hover:text-rose-600 hover:border-rose-200 text-[11px] font-medium shrink-0 transition cursor-pointer">
+        Parking info
+      </button>
+    </div>
+
+    <!-- Chat Messages History Container -->
+    <div id="chatMessagesContainer" class="flex-1 p-4 sm:p-5 overflow-y-auto space-y-3.5 bg-slate-50/50 min-h-[260px] max-h-[380px]">
+      <div class="text-center py-6 text-slate-400 text-xs font-medium">
+        Loading conversation...
+      </div>
+    </div>
+
+    <!-- Chat Input Form -->
+    <form onsubmit="handleSendLandlordMessage(event)" class="p-3 sm:p-4 bg-white border-t border-slate-100 space-y-2.5">
+      <div class="flex items-center gap-2">
+        <input 
+          type="text" 
+          id="chatSenderName" 
+          placeholder="Your Name (e.g. Lerato)" 
+          class="w-1/3 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 outline-none focus:border-rose-500 focus:bg-white"
+        />
+        <input 
+          type="tel" 
+          id="chatSenderPhone" 
+          placeholder="Contact number (optional)" 
+          class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 outline-none focus:border-rose-500 focus:bg-white"
+        />
+      </div>
+      <div class="flex items-center gap-2">
+        <input 
+          type="text" 
+          id="chatMessageInput" 
+          required 
+          placeholder="Type your question or viewing inquiry..." 
+          class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 outline-none focus:border-rose-500 focus:bg-white"
+        />
+        <button 
+          type="submit" 
+          id="chatSubmitBtn" 
+          class="bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
+        >
+          <span>Send</span>
+          <span>➤</span>
+        </button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -674,21 +856,38 @@
     <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
       <div>
         <h3 class="text-xl font-bold text-slate-900 font-heading">Post a Room Request</h3>
-        <p class="text-xs text-slate-500">Let verified township landlords contact you on WhatsApp</p>
+        <p class="text-xs text-slate-500">Let verified township landlords contact you on WhatsApp • Quick & direct, no profile needed</p>
       </div>
       <button onclick="toggleModal('addSeekerModal')" aria-label="Close" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 flex items-center justify-center font-bold text-lg leading-none transition cursor-pointer">✕</button>
     </div>
 
+    <!-- Safety Reminder for Tenants -->
+    <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-950 flex items-start gap-2.5">
+      <span class="text-base">🛡️</span>
+      <p class="text-[11px] text-amber-900 leading-normal font-medium">
+        <strong>Safety Tip:</strong> When landlords contact you, always call to verify, never pay any deposit or viewing fee before physical inspection, and visit the room with 1 or 2 companions.
+      </p>
+    </div>
+
     <form id="addSeekerForm" onsubmit="handleSeekerSubmit(event)" class="space-y-4">
+
       <div>
         <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Your Full Name</label>
         <input type="text" id="seekerName" required placeholder="e.g. Lerato Mthembu" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
       </div>
 
       <div>
-        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">South African Phone / WhatsApp Number</label>
-        <input type="tel" id="seekerPhone" required placeholder="0821234567" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
-        <p class="text-[11px] text-slate-500 mt-1">Landlords with available rooms will use this number to message you on WhatsApp.</p>
+        <div class="flex items-center justify-between mb-1">
+          <label for="seekerPhone" class="block text-xs font-bold text-slate-700 uppercase">South African Mobile / WhatsApp Number</label>
+          <span class="text-[10px] text-slate-400 font-medium">e.g. 082 123 4567</span>
+        </div>
+        <div class="relative">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 font-bold text-xs select-none">
+            🇿🇦 +27
+          </div>
+          <input type="tel" id="seekerPhone" required placeholder="082 123 4567" inputmode="tel" autocomplete="tel" maxlength="12" class="w-full pl-16 border border-slate-300 rounded-xl p-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-emerald-500 transition" aria-describedby="seekerPhoneFeedback" />
+        </div>
+        <div id="seekerPhoneFeedback" class="text-[11px] text-slate-500 mt-1">Landlords with available rooms will use this number to message you on WhatsApp.</div>
       </div>
 
       <div class="grid grid-cols-2 gap-3">
@@ -759,9 +958,20 @@
     <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
       <div>
         <h3 class="text-xl font-bold text-slate-900 font-heading">List Your Room</h3>
-        <p class="text-xs text-slate-500">Connect with qualified tenants in Soweto</p>
+        <p class="text-xs text-slate-500">Connect with qualified tenants in Soweto • Instant direct posting (No OTP required)</p>
       </div>
       <button onclick="toggleModal('addRoomModal')" aria-label="Close" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 flex items-center justify-center font-bold text-lg leading-none transition cursor-pointer">✕</button>
+    </div>
+
+    <!-- Landlord Safety & Viewing Etiquette Note -->
+    <div class="mb-4 p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-950 space-y-1.5">
+      <div class="flex items-center gap-1.5 font-bold text-amber-900">
+        <span>🛡️</span>
+        <span>Safety Notice for Landlords & Tenants</span>
+      </div>
+      <p class="text-[11px] text-amber-900/90 leading-relaxed">
+        Always welcome tenants to visit during daylight hours with 1 or 2 companions. Never demand upfront deposits or viewing fees before an in-person viewing of the room.
+      </p>
     </div>
 
     <form id="addRoomForm" onsubmit="handleInitialSubmit(event)" class="space-y-4">
@@ -770,8 +980,17 @@
         <input type="text" id="ownerName" required placeholder="e.g. Sipho Ndlovu" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
       </div>
       <div>
-        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">SA Phone Number</label>
-        <input type="tel" id="phoneNumber" placeholder="0821234567" required class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
+        <div class="flex items-center justify-between mb-1">
+          <label for="phoneNumber" class="block text-xs font-bold text-slate-700 uppercase">SA Mobile Phone Number</label>
+          <span class="text-[10px] text-emerald-600 font-bold">Direct WhatsApp & Call</span>
+        </div>
+        <div class="relative">
+          <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 font-bold text-xs select-none">
+            🇿🇦 +27
+          </div>
+          <input type="tel" id="phoneNumber" placeholder="082 123 4567" inputmode="tel" autocomplete="tel" required maxlength="12" class="w-full pl-16 border border-slate-300 rounded-xl p-2.5 text-sm font-semibold outline-none focus:ring-2 focus:ring-brand-500 transition" aria-describedby="phoneNumberFeedback" />
+        </div>
+        <div id="phoneNumberFeedback" class="text-[11px] text-slate-500 mt-1">Enter your 10-digit South African mobile number (tenants will call/WhatsApp you).</div>
       </div>
       <div>
         <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Title / Headline</label>
@@ -800,13 +1019,67 @@
           </select>
         </div>
         <div>
-          <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Image URL (Optional)</label>
-          <input type="url" id="newImage" placeholder="https://..." class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
+          <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Street Address / Landmark</label>
+          <input type="text" id="newAddress" required placeholder="Street name / Zone" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
         </div>
       </div>
-      <div>
-        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Street Address / Landmark</label>
-        <input type="text" id="newAddress" required placeholder="Street name / Zone" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
+
+      <!-- PHOTO UPLOAD SECTION -->
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between">
+          <label class="block text-xs font-bold text-slate-700 uppercase">Room Photo</label>
+          <span class="text-[11px] text-slate-400 font-medium">Upload photo or enter URL</span>
+        </div>
+
+        <!-- Photo Upload Dropzone / Button -->
+        <div id="imageUploadArea" class="border-2 border-dashed border-slate-300 hover:border-brand-500 bg-slate-50 hover:bg-brand-50/40 rounded-2xl p-4 text-center transition cursor-pointer relative group" onclick="triggerPhotoSelect()">
+          <input type="file" id="roomPhotoFileInput" accept="image/*" class="hidden" onchange="handleRoomPhotoFileSelected(this)" />
+          
+          <!-- Upload Prompt UI -->
+          <div id="uploadPromptContainer" class="space-y-2">
+            <div class="w-12 h-12 mx-auto rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center text-2xl group-hover:scale-105 transition shadow-xs">
+              📸
+            </div>
+            <div>
+              <p class="text-xs font-bold text-slate-800">
+                <span class="text-brand-600 underline">Upload Room Picture</span> or drag & drop
+              </p>
+              <p class="text-[11px] text-slate-500 mt-0.5">Supports Camera / Gallery / JPG, PNG, WEBP</p>
+            </div>
+            <button type="button" onclick="event.stopPropagation(); triggerPhotoSelect();" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-300 hover:border-brand-500 text-slate-700 hover:text-brand-600 text-xs font-bold shadow-2xs transition">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+              <span>Choose Photo</span>
+            </button>
+          </div>
+
+          <!-- Preview Container (shown when photo is selected) -->
+          <div id="imagePreviewContainer" class="hidden relative">
+            <div class="relative w-full h-44 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shadow-inner">
+              <img id="roomPhotoPreviewImg" src="" alt="Room preview" class="w-full h-full object-cover" />
+              <div class="absolute top-2 right-2 flex gap-1">
+                <button type="button" onclick="event.stopPropagation(); removeUploadedPhoto();" class="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-md cursor-pointer transition">
+                  ✕ Remove
+                </button>
+              </div>
+              <div class="absolute bottom-2 left-2 px-2.5 py-1 bg-black/75 text-white text-[11px] font-bold rounded-md backdrop-blur-xs flex items-center gap-1">
+                <span>✓ Photo ready</span>
+                <span id="photoFileName" class="text-slate-300 font-normal max-w-[160px] truncate"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Toggle URL input -->
+        <div class="flex items-center justify-between pt-1">
+          <button type="button" onclick="toggleUrlPhotoInput()" class="text-[11px] font-semibold text-slate-500 hover:text-brand-600 transition flex items-center gap-1 cursor-pointer">
+            <span>🔗 Or paste image URL</span>
+          </button>
+          <span id="uploadStatusBadge" class="hidden text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">Photo Attached ✓</span>
+        </div>
+
+        <div id="urlPhotoInputContainer" class="hidden pt-1">
+          <input type="url" id="newImage" placeholder="https://images.unsplash.com/..." oninput="handleManualUrlInput(this.value)" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-brand-500" />
+        </div>
       </div>
       <div id="institutionField" class="hidden">
         <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Nearby Campus / Institution</label>
@@ -823,12 +1096,12 @@
           <span class="font-semibold text-xs">This number has WhatsApp</span>
         </label>
         <label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
-          <input type="checkbox" id="showPhonePublicly" onchange="onPublicToggle()" class="rounded text-brand-500" />
-          <span class="font-semibold text-xs">Show my phone number directly on the listing (optional)</span>
+          <input type="checkbox" id="showPhonePublicly" checked onchange="onPublicToggle()" class="rounded text-brand-500" />
+          <span class="font-semibold text-xs">Show my phone number directly on the listing</span>
         </label>
-        <label id="consentRow" class="hidden items-center gap-2 text-xs text-slate-600 pl-6">
-          <input type="checkbox" id="consentPhonePublic" class="rounded text-brand-500" />
-          <span>I understand and consent to my phone number being publicly visible on this listing.</span>
+        <label id="consentRow" class="items-center gap-2 text-xs text-slate-600 pl-6 flex">
+          <input type="checkbox" id="consentPhonePublic" checked class="rounded text-brand-500" />
+          <span>I consent to my phone number being visible to prospective tenants on this listing.</span>
         </label>
         <p id="noWhatsappWarning" class="hidden text-xs text-amber-600">
           Since this number doesn't have WhatsApp, tenants will see a "Call" button instead.
@@ -840,47 +1113,173 @@
       <p id="submit-error" class="hidden text-xs text-red-500 font-semibold"></p>
       <div class="pt-2 flex justify-end space-x-3 border-t border-slate-100">
         <button type="button" onclick="toggleModal('addRoomModal')" class="px-4 py-2.5 text-sm font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer">✕ Cancel</button>
-        <button type="submit" id="btn-submit" class="bg-brand-500 hover:bg-brand-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-xs cursor-pointer">Verify Phone & Continue</button>
+        <button type="submit" id="btn-submit" class="bg-brand-500 hover:bg-brand-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-xs cursor-pointer">🚀 Post Room Listing Now</button>
       </div>
     </form>
   </div>
 </div>
 
+<!-- MODAL: SAFETY & SCAM PROTECTION GUIDE -->
+<div id="safetyGuideModal" class="modal-backdrop fixed inset-0 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4 z-50 hidden" onclick="handleBackdropClick(event, 'safetyGuideModal')">
+  <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto custom-scrollbar relative" onclick="event.stopPropagation()">
+    <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-lg shrink-0">
+          🛡️
+        </div>
+        <div>
+          <h3 class="text-xl font-bold text-slate-900 font-heading">Safety & Scam Protection Guide</h3>
+          <p class="text-xs text-slate-500">Essential rules for safe accommodation searching in Soweto</p>
+        </div>
+      </div>
+      <button onclick="toggleModal('safetyGuideModal')" aria-label="Close" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 flex items-center justify-center font-bold text-lg leading-none transition cursor-pointer">✕</button>
+    </div>
+
+    <div class="space-y-4 text-xs text-slate-700 leading-relaxed">
+      <!-- Rule 1 -->
+      <div class="p-3.5 bg-amber-50/80 border border-amber-200 rounded-xl space-y-1">
+        <div class="font-extrabold text-slate-900 text-sm flex items-center gap-1.5">
+          <span>📞</span>
+          <span>1. Always Call & Verify First</span>
+        </div>
+        <p class="text-slate-600">
+          Never rely solely on text or anonymous messages. Speak with the landlord directly via voice call to confirm the street address, monthly rent, prepaid electricity arrangements, and viewing times.
+        </p>
+      </div>
+
+      <!-- Rule 2 -->
+      <div class="p-3.5 bg-red-50/80 border border-red-200 rounded-xl space-y-1">
+        <div class="font-extrabold text-red-950 text-sm flex items-center gap-1.5">
+          <span>🚫</span>
+          <span>2. Never Send Money Upfront</span>
+        </div>
+        <p class="text-red-900">
+          Scammers often demand "holding deposits", "viewing fees", or "key courier fees" via e-Wallet or instant cash send before showing you the room. <strong>Legitimate landlords will never ask you to pay before an in-person viewing.</strong>
+        </p>
+      </div>
+
+      <!-- Rule 3 -->
+      <div class="p-3.5 bg-blue-50/80 border border-blue-200 rounded-xl space-y-1">
+        <div class="font-extrabold text-blue-950 text-sm flex items-center gap-1.5">
+          <span>👥</span>
+          <span>3. Always Visit with 1 or 2 People</span>
+        </div>
+        <p class="text-blue-900">
+          For your personal safety, always take 1 or 2 friends or family members when going to view any room or backroom. Visit during daytime hours and inform someone close to you of your destination.
+        </p>
+      </div>
+
+      <!-- Rule 4 -->
+      <div class="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-1">
+        <div class="font-extrabold text-emerald-950 text-sm flex items-center gap-1.5">
+          <span>🔍</span>
+          <span>4. In-Person Inspection Checklist</span>
+        </div>
+        <ul class="list-disc pl-4 space-y-1 text-emerald-900">
+          <li>Check that door locks, burglar bars, and windows are intact and secure.</li>
+          <li>Confirm if the room has its own prepaid electricity meter or if power is shared.</li>
+          <li>Verify hot water supply, bathroom plumbing, and perimeter gate safety.</li>
+          <li>Ensure a written lease or receipt is provided when you eventually make a payment.</li>
+        </ul>
+      </div>
+
+      <div class="pt-2">
+        <button onclick="toggleModal('safetyGuideModal')" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl text-xs transition cursor-pointer">
+          ✓ I Understand & Stay Safe
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- STEP 2: OTP ENTRY MODAL -->
 <div id="otpModal" class="modal-backdrop hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50" onclick="handleBackdropClick(event, 'otpModal')">
-  <div class="bg-white border border-slate-200 p-6 rounded-2xl max-w-sm w-full text-center shadow-2xl relative" onclick="event.stopPropagation()">
-    <div class="flex justify-between items-center mb-3">
-      <h2 class="text-xl font-bold text-slate-900 font-heading">Enter SMS Code</h2>
+  <div class="bg-white border border-slate-200 p-6 sm:p-7 rounded-2xl max-w-md w-full text-center shadow-2xl relative" onclick="event.stopPropagation()">
+    <!-- Header with masked phone number & change button -->
+    <div class="flex justify-between items-start mb-3">
+      <div class="text-left">
+        <div class="flex items-center gap-1.5 mb-1">
+          <span class="text-[11px] font-black uppercase tracking-wider text-brand-600 bg-brand-50 px-2 py-0.5 rounded-md border border-brand-100">Step 2 of 2</span>
+          <span class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">⚡ No Login Needed • Free OTP</span>
+        </div>
+        <h2 class="text-xl font-black text-slate-900 font-heading">Verify Phone Number</h2>
+      </div>
       <button onclick="toggleModal('otpModal')" aria-label="Close" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 flex items-center justify-center font-bold text-lg transition cursor-pointer">✕</button>
     </div>
-    <p class="text-xs text-slate-500 mb-4">Sent to <span id="display-phone" class="text-brand-500 font-mono font-bold"></span></p>
 
-    <div class="flex justify-center gap-2 mb-4">
-      <input type="text" inputmode="numeric" maxlength="1" class="otp-box w-10 h-12 text-center text-xl font-bold bg-slate-50 border border-slate-300 rounded-lg focus:border-brand-500 outline-none">
-      <input type="text" inputmode="numeric" maxlength="1" class="otp-box w-10 h-12 text-center text-xl font-bold bg-slate-50 border border-slate-300 rounded-lg focus:border-brand-500 outline-none">
-      <input type="text" inputmode="numeric" maxlength="1" class="otp-box w-10 h-12 text-center text-xl font-bold bg-slate-50 border border-slate-300 rounded-lg focus:border-brand-500 outline-none">
-      <input type="text" inputmode="numeric" maxlength="1" class="otp-box w-10 h-12 text-center text-xl font-bold bg-slate-50 border border-slate-300 rounded-lg focus:border-brand-500 outline-none">
-      <input type="text" inputmode="numeric" maxlength="1" class="otp-box w-10 h-12 text-center text-xl font-bold bg-slate-50 border border-slate-300 rounded-lg focus:border-brand-500 outline-none">
-      <input type="text" inputmode="numeric" maxlength="1" class="otp-box w-10 h-12 text-center text-xl font-bold bg-slate-50 border border-slate-300 rounded-lg focus:border-brand-500 outline-none">
+    <!-- Phone summary info card with "Change" button -->
+    <div class="mb-4 text-left bg-slate-100/90 border border-slate-200 rounded-xl p-3 flex items-center justify-between gap-2">
+      <div class="overflow-hidden">
+        <div class="text-[11px] font-bold uppercase tracking-wider text-slate-500">Verification Code Sent To</div>
+        <div class="flex items-center gap-2 mt-0.5">
+          <span class="text-sm font-black font-mono text-slate-900" id="display-masked-phone">+27 •• ••• ••••</span>
+          <span id="display-phone-canonical" class="hidden text-xs text-slate-500 font-mono"></span>
+        </div>
+      </div>
+      <button type="button" onclick="changePhoneNumber()" class="shrink-0 bg-white hover:bg-slate-200 text-slate-700 border border-slate-200 text-xs font-bold px-3 py-1.5 rounded-lg transition shadow-2xs cursor-pointer flex items-center gap-1">
+        <span>✏️</span>
+        <span>Change</span>
+      </button>
     </div>
 
-    <p id="otp-error" class="hidden text-xs text-red-500 mb-4 font-semibold"></p>
-    <button onclick="handleVerifyOtp()" id="btn-verify" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold p-3 rounded-xl transition cursor-pointer">Verify & Publish Listing</button>
-    <button onclick="toggleModal('otpModal')" class="w-full mt-3 text-xs font-bold text-slate-500 hover:text-slate-800 py-2 rounded-lg hover:bg-slate-100 transition cursor-pointer">✕ Cancel & Close</button>
+    <!-- Instant Dev Test / Auto-Fill Banner (Shown in Development) -->
+    <div id="otp-dev-banner" class="mb-4 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="text-[11px] font-extrabold uppercase tracking-wide text-emerald-800 flex items-center gap-1">
+          <span>⚡ Instant Code</span>
+        </span>
+        <span class="text-[10px] bg-emerald-200 text-emerald-900 font-bold px-2 py-0.5 rounded-full">Free • No SMS Fee</span>
+      </div>
+      <div class="flex items-center justify-center gap-2.5 mt-1">
+        <span id="modal-otp-display" class="font-mono text-2xl font-black tracking-widest text-emerald-700 bg-white px-3 py-1 rounded-lg border border-emerald-300 shadow-xs select-all">------</span>
+        <button type="button" onclick="autofillOtp()" class="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition shadow-xs cursor-pointer flex items-center gap-1">
+          <span>⚡ Auto-Fill</span>
+        </button>
+      </div>
+    </div>
+
+    <p class="text-xs text-slate-600 mb-2.5 font-medium">Enter the 6-digit verification code below:</p>
+
+    <div class="flex justify-center gap-1.5 sm:gap-2 mb-3" id="otp-inputs-container">
+      <input type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="1" class="otp-box w-10 sm:w-11 h-12 text-center text-xl font-black bg-slate-50 border border-slate-300 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-200 outline-none transition" />
+      <input type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="1" class="otp-box w-10 sm:w-11 h-12 text-center text-xl font-black bg-slate-50 border border-slate-300 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-200 outline-none transition" />
+      <input type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="1" class="otp-box w-10 sm:w-11 h-12 text-center text-xl font-black bg-slate-50 border border-slate-300 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-200 outline-none transition" />
+      <input type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="1" class="otp-box w-10 sm:w-11 h-12 text-center text-xl font-black bg-slate-50 border border-slate-300 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-200 outline-none transition" />
+      <input type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="1" class="otp-box w-10 sm:w-11 h-12 text-center text-xl font-black bg-slate-50 border border-slate-300 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-200 outline-none transition" />
+      <input type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="1" class="otp-box w-10 sm:w-11 h-12 text-center text-xl font-black bg-slate-50 border border-slate-300 rounded-xl focus:border-brand-500 focus:ring-2 focus:ring-brand-200 outline-none transition" />
+    </div>
+
+    <p id="otp-error" class="hidden text-xs text-red-500 mb-3 font-semibold p-2 bg-red-50 border border-red-200 rounded-xl"></p>
+
+    <div class="space-y-2.5">
+      <button onclick="handleVerifyOtp()" id="btn-verify" class="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white font-bold py-3 rounded-xl transition shadow-sm cursor-pointer flex items-center justify-center gap-2 text-sm">
+        <span>✓ Verify & Publish Listing</span>
+      </button>
+      
+      <!-- Resend Button with Strict Countdown -->
+      <button type="button" id="btn-resend-otp" onclick="resendOtp()" class="w-full py-2.5 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed">
+        <span id="resend-icon">🔄</span>
+        <span id="resend-text">Resend New Code</span>
+      </button>
+      
+      <button onclick="toggleModal('otpModal')" class="w-full text-xs font-bold text-slate-500 hover:text-slate-800 py-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+        ✕ Cancel
+      </button>
+    </div>
   </div>
 </div>
 
 <!-- DEV HELPER TOAST -->
 <div id="dev-otp-toast" class="hidden fixed bottom-5 right-5 bg-slate-950 border border-amber-500/40 p-4 rounded-2xl shadow-2xl z-50">
-  <div class="text-xs text-amber-400 font-bold mb-1">DEV MODE — OTP CODE</div>
+  <div class="text-xs text-amber-400 font-bold mb-1">FREE INSTANT OTP CODE</div>
   <div class="flex items-center gap-3">
     <span id="dev-otp-code" class="text-xl font-mono text-emerald-400 font-bold">------</span>
-    <button onclick="autofillOtp()" class="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs px-2.5 py-1 rounded-lg border border-amber-500/30 font-bold">Auto-fill</button>
+    <button onclick="autofillOtp()" class="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs px-2.5 py-1 rounded-lg border border-amber-500/30 font-bold cursor-pointer">Auto-fill</button>
   </div>
 </div>
 
 <!-- FOOTER -->
-<footer class="bg-slate-900 text-slate-400 py-12 border-t border-slate-800 mt-16">
+<footer class="bg-slate-900 text-slate-400 py-12 border-t border-slate-800 mt-16 pb-24 sm:pb-12">
   <div class="max-w-7xl mx-auto px-4 text-center space-y-4">
     <div class="flex items-center justify-center gap-2">
       <div class="w-7 h-7 rounded-lg bg-brand-500 text-white font-black flex items-center justify-center text-sm">R</div>
@@ -890,12 +1289,11 @@
       South Africa's dedicated township property portal connecting verified landlords & room seekers across Soweto & surrounds.
     </p>
 
-    <!-- Attribution Pill -->
-    <div class="pt-1 pb-1">
-      <span class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-slate-800/90 text-slate-200 text-xs font-semibold border border-slate-700 shadow-xs">
-        <span>⭐ Platform designed & built by</span>
-        <strong class="text-rose-400 font-extrabold">David Rakosa</strong>
-      </span>
+    <!-- Soweto Verified Hub Banner -->
+    <div class="pt-2 pb-1 flex justify-center">
+      <div class="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800/90 text-brand-400 text-xs sm:text-sm font-extrabold uppercase tracking-wider border border-slate-700 shadow-sm">
+        <span>🇿🇦 Soweto's #1 Verified Room & Tenant Hub • Done by David Rakosa</span>
+      </div>
     </div>
 
     <div class="flex items-center justify-center gap-4 text-xs text-slate-400 pt-1 font-semibold flex-wrap">
@@ -903,14 +1301,45 @@
       <span>&bull;</span>
       <a href="javascript:void(0)" onclick="switchTab('seekers')" class="hover:text-white transition">Room Seekers</a>
       <span>&bull;</span>
+      <a href="javascript:void(0)" onclick="toggleModal('safetyGuideModal')" class="hover:text-amber-400 text-amber-300 transition flex items-center gap-1">🛡️ Safety & Scam Guide</a>
+      <span>&bull;</span>
       <a href="javascript:void(0)" onclick="toggleModal('calculatorModal')" class="hover:text-white transition">Budget Calculator</a>
+      <span>&bull;</span>
+      <a href="javascript:void(0)" onclick="switchTab('aichat')" class="hover:text-blue-400 text-blue-300 transition flex items-center gap-1">🤖 AI Housing Advisor</a>
       <span>&bull;</span>
       <a href="/admin" class="hover:text-white transition text-slate-400 hover:text-slate-200">Admin Portal</a>
     </div>
-    <p class="text-[11px] text-slate-500 pt-3">&copy; <span id="copyrightYear"></span> Rent A Room Soweto • This was done by <strong>David Rakosa</strong>. All rights reserved.</p>
+    <p class="text-[11px] text-slate-500 pt-3">&copy; <span id="copyrightYear">2026</span> Rent A Room Soweto • This was done by <strong>David Rakosa</strong>. All rights reserved.</p>
   </div>
 </footer>
-<script>document.getElementById('copyrightYear').textContent = new Date().getFullYear();</script>
+
+<!-- MOBILE BOTTOM NAVIGATION BAR (Visible only on screens below 640px) -->
+<nav id="mobileBottomNav" class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] sm:hidden px-3 py-1.5 flex items-center justify-around" aria-label="Mobile Navigation">
+  <!-- Listings Tab -->
+  <button id="mobileNavListings" onclick="handleMobileNav('listings')" class="flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-brand-600 bg-brand-50/70 font-extrabold transition cursor-pointer">
+    <span class="text-lg leading-none">🏠</span>
+    <span class="text-[10px] font-bold tracking-tight mt-1">Listings</span>
+  </button>
+
+  <!-- Tenants Tab -->
+  <button id="mobileNavTenants" onclick="handleMobileNav('tenants')" class="flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-slate-500 hover:text-slate-900 transition cursor-pointer">
+    <span class="text-lg leading-none">🙋</span>
+    <span class="text-[10px] font-bold tracking-tight mt-1">Tenants</span>
+  </button>
+
+  <!-- Saved Rooms Tab -->
+  <button id="mobileNavSaved" onclick="handleMobileNav('saved')" class="flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-slate-500 hover:text-slate-900 transition cursor-pointer relative">
+    <span class="text-lg leading-none">❤️</span>
+    <span class="text-[10px] font-bold tracking-tight mt-1">Saved</span>
+    <span id="savedCountBadgeMobile" class="absolute top-0 right-3 bg-rose-500 text-white rounded-full px-1.5 py-0 text-[9px] font-black hidden">0</span>
+  </button>
+
+  <!-- AI Advisor Tab -->
+  <button id="mobileNavAi" onclick="handleMobileNav('aichat')" class="flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-slate-500 hover:text-slate-900 transition cursor-pointer">
+    <span class="text-lg leading-none">🤖</span>
+    <span class="text-[10px] font-bold tracking-tight mt-1">AI Advisor</span>
+  </button>
+</nav>
 
 <script>
 function escapeHtml(str) {
@@ -955,12 +1384,70 @@ function showToast(message, type = 'info') {
 // Update saved favorites count badge
 function updateSavedBadge() {
   const badge = document.getElementById('savedCountBadge');
+  const mobileBadge = document.getElementById('savedCountBadgeMobile');
   if (savedListingIds.length > 0) {
-    badge.innerText = savedListingIds.length;
-    badge.classList.remove('hidden');
+    if (badge) {
+      badge.innerText = savedListingIds.length;
+      badge.classList.remove('hidden');
+    }
+    if (mobileBadge) {
+      mobileBadge.innerText = savedListingIds.length;
+      mobileBadge.classList.remove('hidden');
+    }
   } else {
-    badge.classList.add('hidden');
+    if (badge) badge.classList.add('hidden');
+    if (mobileBadge) mobileBadge.classList.add('hidden');
   }
+}
+
+// Mobile Bottom Navigation Handler
+function handleMobileNav(target) {
+  if (target === 'listings') {
+    if (filterOnlyFavorites) {
+      filterOnlyFavorites = false;
+      const btn = document.getElementById('filterOnlySavedBtn');
+      if (btn) {
+        btn.className = 'text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1';
+        btn.innerHTML = '<span>❤️ View Saved</span>';
+      }
+      renderListingsGrid(loadedListingsCache);
+    }
+    switchTab('listings');
+  } else if (target === 'tenants') {
+    switchTab('seekers');
+  } else if (target === 'saved') {
+    if (currentTab !== 'listings') {
+      switchTab('listings');
+    }
+    if (!filterOnlyFavorites) {
+      toggleFavoritesView();
+    } else {
+      renderListingsGrid(loadedListingsCache);
+    }
+    updateMobileNavState('saved');
+    return;
+  } else if (target === 'aichat') {
+    switchTab('aichat');
+  }
+  updateMobileNavState(target);
+}
+
+function updateMobileNavState(activeKey) {
+  const navListings = document.getElementById('mobileNavListings');
+  const navTenants = document.getElementById('mobileNavTenants');
+  const navSaved = document.getElementById('mobileNavSaved');
+  const navAi = document.getElementById('mobileNavAi');
+
+  const inactiveClass = 'flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-slate-500 hover:text-slate-900 transition cursor-pointer';
+  const activeListingsClass = 'flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-brand-600 bg-brand-50/70 font-extrabold transition cursor-pointer';
+  const activeTenantsClass = 'flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-emerald-600 bg-emerald-50/70 font-extrabold transition cursor-pointer';
+  const activeSavedClass = 'flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-rose-600 bg-rose-50/70 font-extrabold transition cursor-pointer relative';
+  const activeAiClass = 'flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl text-blue-600 bg-blue-50/70 font-extrabold transition cursor-pointer';
+
+  if (navListings) navListings.className = activeKey === 'listings' ? activeListingsClass : inactiveClass;
+  if (navTenants) navTenants.className = (activeKey === 'tenants' || activeKey === 'seekers') ? activeTenantsClass : inactiveClass;
+  if (navSaved) navSaved.className = activeKey === 'saved' ? activeSavedClass : (inactiveClass + ' relative');
+  if (navAi) navAi.className = activeKey === 'aichat' ? activeAiClass : inactiveClass;
 }
 
 // Toggle saved state for a room
@@ -998,12 +1485,18 @@ function toggleFavoritesView() {
   filterOnlyFavorites = !filterOnlyFavorites;
   const btn = document.getElementById('filterOnlySavedBtn');
   if (filterOnlyFavorites) {
-    btn.className = 'text-xs font-bold px-3 py-1.5 rounded-xl border border-rose-300 bg-rose-50 text-rose-700 transition flex items-center gap-1';
-    btn.innerHTML = '<span>❤️ Showing Saved Only</span>';
+    if (btn) {
+      btn.className = 'text-xs font-bold px-3 py-1.5 rounded-xl border border-rose-300 bg-rose-50 text-rose-700 transition flex items-center gap-1';
+      btn.innerHTML = '<span>❤️ Showing Saved Only</span>';
+    }
+    updateMobileNavState('saved');
     showToast(`Showing ${savedListingIds.length} saved rooms`, 'info');
   } else {
-    btn.className = 'text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1';
-    btn.innerHTML = '<span>❤️ View Saved</span>';
+    if (btn) {
+      btn.className = 'text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1';
+      btn.innerHTML = '<span>❤️ View Saved</span>';
+    }
+    updateMobileNavState(currentTab);
   }
   renderListingsGrid(loadedListingsCache);
 }
@@ -1042,38 +1535,39 @@ function switchTab(tab) {
   const seekersFilter = document.getElementById('seekersFilterBar');
 
   if (tab === 'listings') {
-    tabListings.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs bg-white text-slate-900 flex items-center gap-2 cursor-pointer';
-    tabSeekers.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900 flex items-center gap-2 cursor-pointer';
+    if (tabListings) tabListings.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs bg-white text-slate-900 flex items-center gap-2 cursor-pointer';
+    if (tabSeekers) tabSeekers.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900 flex items-center gap-2 cursor-pointer';
     if (tabAiChat) tabAiChat.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900 flex items-center gap-2 cursor-pointer';
-    listingsView.classList.remove('hidden');
-    seekersView.classList.add('hidden');
+    if (listingsView) listingsView.classList.remove('hidden');
+    if (seekersView) seekersView.classList.add('hidden');
     if (aiChatView) aiChatView.classList.add('hidden');
-    listingsFilter.classList.remove('hidden');
-    seekersFilter.classList.add('hidden');
+    if (listingsFilter) listingsFilter.classList.remove('hidden');
+    if (seekersFilter) seekersFilter.classList.add('hidden');
   } else if (tab === 'seekers') {
-    tabSeekers.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs bg-white text-emerald-900 flex items-center gap-2 cursor-pointer';
-    tabListings.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900 flex items-center gap-2 cursor-pointer';
+    if (tabSeekers) tabSeekers.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs bg-white text-emerald-900 flex items-center gap-2 cursor-pointer';
+    if (tabListings) tabListings.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900 flex items-center gap-2 cursor-pointer';
     if (tabAiChat) tabAiChat.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900 flex items-center gap-2 cursor-pointer';
-    seekersView.classList.remove('hidden');
-    listingsView.classList.add('hidden');
+    if (seekersView) seekersView.classList.remove('hidden');
+    if (listingsView) listingsView.classList.add('hidden');
     if (aiChatView) aiChatView.classList.add('hidden');
-    seekersFilter.classList.remove('hidden');
-    listingsFilter.classList.add('hidden');
+    if (seekersFilter) seekersFilter.classList.remove('hidden');
+    if (listingsFilter) listingsFilter.classList.add('hidden');
     loadSeekers();
   } else if (tab === 'aichat') {
     if (tabAiChat) tabAiChat.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs bg-white text-blue-900 flex items-center gap-2 cursor-pointer';
-    tabListings.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900 flex items-center gap-2 cursor-pointer';
-    tabSeekers.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900 flex items-center gap-2 cursor-pointer';
+    if (tabListings) tabListings.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900 flex items-center gap-2 cursor-pointer';
+    if (tabSeekers) tabSeekers.className = 'px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all text-slate-600 hover:text-slate-900 flex items-center gap-2 cursor-pointer';
     if (aiChatView) aiChatView.classList.remove('hidden');
-    listingsView.classList.add('hidden');
-    seekersView.classList.add('hidden');
-    listingsFilter.classList.add('hidden');
-    seekersFilter.classList.add('hidden');
+    if (listingsView) listingsView.classList.add('hidden');
+    if (seekersView) seekersView.classList.add('hidden');
+    if (listingsFilter) listingsFilter.classList.add('hidden');
+    if (seekersFilter) seekersFilter.classList.add('hidden');
     setTimeout(() => {
       const input = document.getElementById('aiChatInput');
       if (input) input.focus();
     }, 100);
   }
+  updateMobileNavState(tab === 'seekers' ? 'tenants' : tab);
 }
 
 async function loadConfig() {
@@ -1089,6 +1583,8 @@ async function loadConfig() {
         s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
         s.async = true;
         s.defer = true;
+        s.crossOrigin = 'anonymous';
+        s.onerror = () => { console.warn('Security challenge script not available'); };
         document.head.appendChild(s);
       }
     }
@@ -1121,7 +1617,7 @@ async function loadListings() {
   try {
     const res = await fetch('/api/listings?' + params.toString());
     const data = await res.json();
-    loadedListingsCache = data.listings || [];
+    loadedListingsCache = data.listings || (data.data && Array.isArray(data.data) ? data.data : (data.data && data.data.items)) || [];
     
     if (tabCountEl) tabCountEl.innerText = loadedListingsCache.length;
     renderListingsGrid(loadedListingsCache);
@@ -1158,6 +1654,7 @@ function renderListingsGrid(items) {
     const isSaved = savedListingIds.includes(room._id);
     const rentFormatted = Number(room.monthlyRent).toLocaleString();
     const photoUrl = room.image || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=80';
+    const listedDateStr = formatListingDate(room.createdAt);
 
     return `
       <div id="room-card-${room._id}" class="room-card bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between cursor-pointer" onclick="openRoomDetail('${room._id}')">
@@ -1180,7 +1677,16 @@ function renderListingsGrid(items) {
           </div>
 
           <!-- Card Info Body -->
-          <div class="p-5 space-y-3">
+          <div class="p-5 space-y-2.5">
+            <!-- Listed Date & Verification Header -->
+            <div class="flex items-center justify-between text-[11px] text-slate-500 font-medium pb-1.5 border-b border-slate-100">
+              <span class="inline-flex items-center gap-1 font-semibold text-slate-600">
+                <span>🗓️</span>
+                <span>Listed: <strong class="text-slate-800 font-bold">${escapeHtml(listedDateStr)}</strong></span>
+              </span>
+              <span class="text-[10px] uppercase font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">Verified</span>
+            </div>
+
             <h3 class="font-black text-slate-900 text-lg leading-snug font-heading hover:text-brand-600 transition">${escapeHtml(room.title)}</h3>
             ${room.nearbyInstitution ? `<div class="text-xs font-bold text-rose-700 flex items-center gap-1">🎓 ${escapeHtml(room.nearbyInstitution)}</div>` : ''}
             
@@ -1205,21 +1711,36 @@ function renderListingsGrid(items) {
               <span class="text-emerald-700 font-bold">${room.hasWhatsapp ? 'WhatsApp' : 'Call'}</span>
             </div>
           ` : ''}
-          <div class="grid grid-cols-3 gap-1.5">
+          <div class="grid grid-cols-4 gap-1.5">
             <button onclick="event.stopPropagation(); openRoomDetail('${room._id}')" class="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-2.5 rounded-xl transition text-center border border-slate-200 cursor-pointer">
               Details
             </button>
             <button onclick="event.stopPropagation(); openShareModal('${room._id}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 rounded-xl transition text-center border border-slate-200 flex items-center justify-center gap-1 cursor-pointer" title="Share unique link with friends">
-              <span>📤 Share</span>
+              <span>📤</span>
             </button>
-            <button onclick="event.stopPropagation(); contactLandlord('${room._id}')" class="bg-slate-900 hover:bg-brand-500 text-white font-bold text-xs py-2.5 rounded-xl transition text-center shadow-xs flex items-center justify-center gap-1 cursor-pointer">
-              <span>💬 WhatsApp</span>
+            <button onclick="event.stopPropagation(); openChatWithLandlord('${room._id}')" class="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs py-2.5 rounded-xl transition text-center border border-rose-200 flex items-center justify-center gap-1 cursor-pointer" title="Chat with Landlord (In-Platform)">
+              <span>💬 Chat</span>
+            </button>
+            <button onclick="event.stopPropagation(); contactLandlord('${room._id}')" class="bg-slate-900 hover:bg-emerald-600 text-white font-bold text-xs py-2.5 rounded-xl transition text-center shadow-xs flex items-center justify-center gap-1 cursor-pointer" title="Chat on WhatsApp">
+              <span>📱 WA</span>
             </button>
           </div>
         </div>
       </div>
     `;
   }).join('');
+}
+
+// Format listing document creation timestamp
+function formatListingDate(dateString) {
+  if (!dateString) return 'Recently';
+  try {
+    const d = new Date(dateString);
+    if (isNaN(d.getTime())) return 'Recently';
+    return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+  } catch (e) {
+    return 'Recently';
+  }
 }
 
 // Generate canonical unique URL for listing
@@ -1250,6 +1771,11 @@ function openRoomDetail(id, updateHistory = true) {
   document.getElementById('detailRent').innerText = `R${Number(room.monthlyRent).toLocaleString()}`;
   document.getElementById('detailDeposit').innerText = `R${Number(room.monthlyRent).toLocaleString()}`;
   document.getElementById('detailMoveInTotal').innerText = `R${(Number(room.monthlyRent) * 2).toLocaleString()}`;
+
+  const listedDateEl = document.getElementById('detailListedDateVal');
+  if (listedDateEl) {
+    listedDateEl.innerText = formatListingDate(room.createdAt);
+  }
 
   const campusRow = document.getElementById('detailCampusRow');
   if (room.nearbyInstitution) {
@@ -1283,6 +1809,202 @@ function openRoomDetail(id, updateHistory = true) {
   const modal = document.getElementById('roomDetailModal');
   if (modal.classList.contains('hidden')) {
     toggleModal('roomDetailModal');
+  }
+}
+
+// ----------------------------------------------------
+// IN-PLATFORM MESSAGING: CHAT WITH LANDLORD
+// ----------------------------------------------------
+let activeChatListingId = null;
+let chatPollingTimer = null;
+
+function getOrCreateTenantId() {
+  let id = localStorage.getItem('rentaroom_tenant_id');
+  if (!id) {
+    id = 'tenant_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+    localStorage.setItem('rentaroom_tenant_id', id);
+  }
+  return id;
+}
+
+async function openChatWithLandlord(id) {
+  let room = loadedListingsCache.find(r => r._id === id);
+  if (!room && activeDetailListing && activeDetailListing._id === id) {
+    room = activeDetailListing;
+  }
+  if (!room) return;
+  activeChatListingId = room._id;
+  activeDetailListing = room;
+
+  // Set header details
+  const nameEl = document.getElementById('chatLandlordName');
+  const subEl = document.getElementById('chatListingSubtitle');
+  if (nameEl) nameEl.innerText = room.landlordFullName ? `Chat with ${room.landlordFullName}` : 'Chat with Landlord';
+  if (subEl) subEl.innerText = `${room.title} • R${Number(room.monthlyRent).toLocaleString()}/mo in ${room.suburb}`;
+
+  // Restore saved sender details
+  const savedName = localStorage.getItem('rentaroom_chat_sender_name');
+  const savedPhone = localStorage.getItem('rentaroom_chat_sender_phone');
+  if (savedName) document.getElementById('chatSenderName').value = savedName;
+  if (savedPhone) document.getElementById('chatSenderPhone').value = savedPhone;
+
+  // Show modal
+  const chatModal = document.getElementById('landlordChatModal');
+  if (chatModal && chatModal.classList.contains('hidden')) {
+    toggleModal('landlordChatModal');
+  }
+
+  // Load messages
+  await loadChatMessages(room._id);
+
+  // Focus input
+  setTimeout(() => {
+    const input = document.getElementById('chatMessageInput');
+    if (input) input.focus();
+  }, 150);
+
+  // Setup periodic refresh while open
+  if (chatPollingTimer) clearInterval(chatPollingTimer);
+  chatPollingTimer = setInterval(() => {
+    const m = document.getElementById('landlordChatModal');
+    if (m && !m.classList.contains('hidden') && activeChatListingId) {
+      loadChatMessages(activeChatListingId, true);
+    } else if (chatPollingTimer) {
+      clearInterval(chatPollingTimer);
+      chatPollingTimer = null;
+    }
+  }, 4000);
+}
+
+function insertQuickMessage(text) {
+  const input = document.getElementById('chatMessageInput');
+  if (input) {
+    input.value = text;
+    input.focus();
+  }
+}
+
+async function loadChatMessages(listingId, silent = false) {
+  const container = document.getElementById('chatMessagesContainer');
+  if (!container) return;
+  if (!silent) {
+    container.innerHTML = '<div class="text-center py-6 text-slate-400 text-xs font-medium animate-pulse">Connecting to landlord...</div>';
+  }
+
+  const tenantId = getOrCreateTenantId();
+  try {
+    const res = await fetch(`/api/listings/${listingId}/messages?tenantId=${encodeURIComponent(tenantId)}`);
+    if (!res.ok) throw new Error('Failed to load chat history');
+    const data = await res.json();
+    const messages = Array.isArray(data.data) ? data.data : ((data.data && data.data.messages) || data.messages || []);
+
+    renderChatMessages(messages);
+  } catch (err) {
+    if (!silent) {
+      container.innerHTML = `<div class="text-center py-4 text-red-500 text-xs font-semibold">Could not load messages: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+}
+
+function renderChatMessages(messages) {
+  const container = document.getElementById('chatMessagesContainer');
+  if (!container) return;
+
+  if (messages.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-8 px-4 space-y-2">
+        <div class="w-12 h-12 rounded-full bg-rose-50 text-rose-500 text-2xl mx-auto flex items-center justify-center">👋</div>
+        <h4 class="font-bold text-sm text-slate-800">Start the conversation</h4>
+        <p class="text-xs text-slate-500 max-w-xs mx-auto">Ask about availability, arrange an in-person viewing, or confirm utility costs directly with the verified landlord.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const html = messages.map(msg => {
+    const isTenant = msg.sender === 'tenant';
+    const timeFormatted = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+    if (isTenant) {
+      return `
+        <div class="flex flex-col items-end space-y-1">
+          <div class="max-w-[85%] bg-rose-500 text-white rounded-2xl rounded-br-xs px-4 py-2.5 text-xs shadow-xs leading-relaxed">
+            ${escapeHtml(msg.text)}
+          </div>
+          <span class="text-[10px] text-slate-400 font-medium pr-1">${escapeHtml(timeFormatted)} • You</span>
+        </div>
+      `;
+    } else {
+      return `
+        <div class="flex flex-col items-start space-y-1">
+          <div class="flex items-center gap-1.5 pl-1">
+            <span class="text-[10px] font-bold text-slate-700">${escapeHtml(msg.senderName || 'Landlord')}</span>
+            <span class="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded-full">✓ Verified</span>
+          </div>
+          <div class="max-w-[85%] bg-white text-slate-800 border border-slate-200 rounded-2xl rounded-bl-xs px-4 py-2.5 text-xs shadow-xs leading-relaxed">
+            ${escapeHtml(msg.text)}
+          </div>
+          <span class="text-[10px] text-slate-400 font-medium pl-1">${escapeHtml(timeFormatted)}</span>
+        </div>
+      `;
+    }
+  }).join('');
+
+  container.innerHTML = html;
+  container.scrollTop = container.scrollHeight;
+}
+
+async function handleSendLandlordMessage(e) {
+  e.preventDefault();
+  if (!activeChatListingId) return;
+
+  const input = document.getElementById('chatMessageInput');
+  const nameInput = document.getElementById('chatSenderName');
+  const phoneInput = document.getElementById('chatSenderPhone');
+  const submitBtn = document.getElementById('chatSubmitBtn');
+
+  const text = (input.value || '').trim();
+  const senderName = (nameInput.value || '').trim() || 'Tenant';
+  const senderPhone = (phoneInput.value || '').trim();
+
+  if (!text) return;
+
+  localStorage.setItem('rentaroom_chat_sender_name', senderName);
+  if (senderPhone) localStorage.setItem('rentaroom_chat_sender_phone', senderPhone);
+
+  const tenantId = getOrCreateTenantId();
+
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span>...</span>';
+
+  try {
+    const res = await fetch(`/api/listings/${activeChatListingId}/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenantId,
+        text,
+        senderName,
+        senderPhone
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      input.value = '';
+      await loadChatMessages(activeChatListingId);
+      // Wait slightly and refresh in case auto-reply triggered
+      setTimeout(() => {
+        loadChatMessages(activeChatListingId, true);
+      }, 1200);
+    } else {
+      showToast(data.message || 'Failed to send message.', 'error');
+    }
+  } catch (err) {
+    showToast('Network error sending message. Please retry.', 'error');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = '<span>Send</span><span>➤</span>';
   }
 }
 
@@ -1553,16 +2275,145 @@ async function loadSeekers() {
   }
 }
 
+// Robust WhatsApp Connector that bypasses iframe/popup restrictions and provides immediate 1-click direct actions
+function openWhatsAppContact(info) {
+  const { whatsappLink, whatsappWebLink, callLink, name, phone, itemTitle } = info;
+  const directLink = whatsappLink || whatsappWebLink;
+  
+  // 1. Try native popup/tab open
+  let launched = false;
+  if (directLink) {
+    try {
+      const win = window.open(directLink, '_blank', 'noopener,noreferrer');
+      if (win && !win.closed && typeof win.closed !== 'undefined') {
+        launched = true;
+      }
+    } catch (_) {}
+    
+    if (!launched) {
+      try {
+        const link = document.createElement('a');
+        link.href = directLink;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        launched = true;
+      } catch (_) {}
+    }
+  }
+
+  // 2. Always show an interactive connection card so user is 100% guaranteed to reach WhatsApp or Phone
+  showWhatsAppConnectCard({
+    name: name || 'Landlord / Seeker',
+    phone: phone || '',
+    whatsappLink: directLink,
+    whatsappWebLink: whatsappWebLink || directLink,
+    callLink: callLink || (phone ? `tel:${phone}` : null),
+    itemTitle: itemTitle || ''
+  });
+}
+
+function showWhatsAppConnectCard(data) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const cardId = 'wa-connect-' + Date.now();
+  const card = document.createElement('div');
+  card.id = cardId;
+  card.className = 'pointer-events-auto bg-slate-900 border border-emerald-500/40 text-white rounded-2xl p-4 shadow-2xl max-w-sm w-full transition-all duration-300 transform translate-y-0';
+  
+  card.innerHTML = `
+    <div class="flex items-start justify-between gap-3 mb-2">
+      <div class="flex items-center gap-2">
+        <div class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-lg">
+          💬
+        </div>
+        <div>
+          <h4 class="text-sm font-bold text-white tracking-tight">Connect on WhatsApp</h4>
+          <p class="text-[11px] text-slate-400 font-medium">${data.name} ${data.phone ? '• ' + data.phone : ''}</p>
+        </div>
+      </div>
+      <button onclick="document.getElementById('${cardId}').remove()" class="text-slate-400 hover:text-white text-xs font-bold p-1">✕</button>
+    </div>
+    
+    ${data.itemTitle ? `<div class="text-[11px] text-emerald-300/90 font-medium mb-3 truncate">Regarding: ${data.itemTitle}</div>` : ''}
+
+    <div class="flex flex-col gap-2">
+      ${data.whatsappLink ? `
+        <a 
+          href="${data.whatsappLink}" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          onclick="document.getElementById('${cardId}').remove()"
+          class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 transition text-center shadow-md shadow-emerald-600/20"
+        >
+          <span>📱 Open WhatsApp Chat</span>
+          <span>→</span>
+        </a>
+      ` : ''}
+      
+      <div class="flex items-center gap-2">
+        ${data.whatsappWebLink ? `
+          <a 
+            href="${data.whatsappWebLink}" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            onclick="document.getElementById('${cardId}').remove()"
+            class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold py-2 px-2.5 rounded-xl text-center border border-slate-700 transition"
+          >
+            💻 Web WhatsApp
+          </a>
+        ` : ''}
+        
+        ${data.callLink ? `
+          <a 
+            href="${data.callLink}" 
+            class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold py-2 px-2.5 rounded-xl text-center border border-slate-700 transition"
+          >
+            📞 Call Direct
+          </a>
+        ` : ''}
+      </div>
+    </div>
+  `;
+
+  container.appendChild(card);
+
+  // Auto remove after 15 seconds if not clicked
+  setTimeout(() => {
+    if (document.getElementById(cardId)) {
+      card.remove();
+    }
+  }, 15000);
+}
+
 // Contact Landlord
 async function contactLandlord(id) {
   try {
+    showToast('Connecting to WhatsApp...', 'info');
     const res = await fetch(`/api/listings/${id}/contact`, { method: 'POST' });
     const data = await res.json();
-    if (res.ok && data.whatsappLink) {
-      window.open(data.whatsappLink, '_blank');
-      showToast('Opening WhatsApp to message landlord...', 'success');
-    } else if (res.ok && data.callLink) {
-      window.location.href = data.callLink;
+    const payload = data.data || data;
+
+    const whatsappLink = payload.whatsappLink || data.whatsappLink;
+    const whatsappWebLink = payload.whatsappWebLink || data.whatsappWebLink;
+    const callLink = payload.callLink || data.callLink;
+    const landlordName = payload.landlordName || 'Landlord';
+    const phone = payload.phone || '';
+    const itemTitle = payload.listingTitle || '';
+
+    if (res.ok && (whatsappLink || whatsappWebLink || callLink)) {
+      openWhatsAppContact({
+        whatsappLink,
+        whatsappWebLink,
+        callLink,
+        name: landlordName,
+        phone,
+        itemTitle
+      });
+      showToast(`Connecting with ${landlordName}...`, 'success');
     } else {
       showToast(data.error || 'Could not start contact request.', 'error');
     }
@@ -1574,13 +2425,27 @@ async function contactLandlord(id) {
 // Contact Room Seeker
 async function contactRoomSeeker(id) {
   try {
+    showToast('Connecting to WhatsApp...', 'info');
     const res = await fetch(`/api/room-requests/${id}/contact`, { method: 'POST' });
     const data = await res.json();
-    if (res.ok && data.whatsappLink) {
-      window.open(data.whatsappLink, '_blank');
-      showToast(`Opening WhatsApp to message ${data.seekerName}...`, 'success');
-    } else if (res.ok && data.callLink) {
-      window.location.href = data.callLink;
+    const payload = data.data || data;
+
+    const whatsappLink = payload.whatsappLink || data.whatsappLink;
+    const whatsappWebLink = payload.whatsappWebLink || data.whatsappWebLink;
+    const callLink = payload.callLink || data.callLink;
+    const seekerName = payload.seekerName || 'Room Seeker';
+    const phone = payload.phone || '';
+
+    if (res.ok && (whatsappLink || whatsappWebLink || callLink)) {
+      openWhatsAppContact({
+        whatsappLink,
+        whatsappWebLink,
+        callLink,
+        name: seekerName,
+        phone,
+        itemTitle: 'Room Seeker Request'
+      });
+      showToast(`Connecting with ${seekerName}...`, 'success');
     } else {
       showToast(data.error || 'Could not initiate contact.', 'error');
     }
@@ -1715,18 +2580,38 @@ function applyCalcFilter() {
   }
 }
 
+// ==========================================================================
+// ROOM SEEKER (TENANT) SYSTEM - DIRECT POSTING (NO PROFILE REQUIRED)
+// ==========================================================================
+function openSeekerModal() {
+  const errEl = document.getElementById('seeker-error');
+  if (errEl) errEl.classList.add('hidden');
+  toggleModal('addSeekerModal');
+}
+
 // HANDLE ROOM SEEKER SUBMIT
 async function handleSeekerSubmit(e) {
   e.preventDefault();
   const errEl = document.getElementById('seeker-error');
   errEl.classList.add('hidden');
   const btn = document.getElementById('btn-seeker-submit');
+
+  const rawPhone = document.getElementById('seekerPhone').value.trim();
+  const validation = window.SAPhoneUtils ? window.SAPhoneUtils.validateMobile(rawPhone) : { valid: rawPhone.length >= 9, normalized: rawPhone };
+
+  if (!validation.valid) {
+    errEl.innerText = validation.message || 'Please enter a valid 10-digit South African mobile number (starting with 06, 07, or 08).';
+    errEl.classList.remove('hidden');
+    document.getElementById('seekerPhone').focus();
+    return;
+  }
+
   btn.disabled = true;
   btn.innerText = 'Posting...';
 
   const payload = {
     seekerName: document.getElementById('seekerName').value.trim(),
-    phone: document.getElementById('seekerPhone').value.trim(),
+    phone: validation.normalized || rawPhone,
     hasWhatsapp: document.getElementById('seekerHasWhatsapp').checked,
     suburb: document.getElementById('seekerSuburb').value.trim(),
     maxBudget: Number(document.getElementById('seekerMaxBudget').value),
@@ -1745,7 +2630,7 @@ async function handleSeekerSubmit(e) {
     const data = await res.json();
 
     if (!res.ok) {
-      errEl.innerText = data.error || 'Failed to post room request.';
+      errEl.innerText = data.error || (data.errors && data.errors[0]) || 'Failed to post room request.';
       errEl.classList.remove('hidden');
       btn.disabled = false;
       btn.innerText = 'Post Room Request';
@@ -1768,22 +2653,101 @@ async function handleSeekerSubmit(e) {
   }
 }
 
-// HANDLE LANDLORD LISTING SUBMIT
+
+// ==========================================
+// OTP COOLDOWN & TIMER LOGIC
+// ==========================================
+let otpCooldownInterval = null;
+let otpCooldownExpiresAt = 0;
+
+function startOtpCooldown(seconds = 60) {
+  if (otpCooldownInterval) clearInterval(otpCooldownInterval);
+  otpCooldownExpiresAt = Date.now() + (seconds * 1000);
+  try {
+    sessionStorage.setItem('otpCooldownExpiresAt', String(otpCooldownExpiresAt));
+  } catch (_) {}
+
+  updateResendButtonUI();
+  otpCooldownInterval = setInterval(updateResendButtonUI, 1000);
+}
+
+function updateResendButtonUI() {
+  const btn = document.getElementById('btn-resend-otp');
+  const textEl = document.getElementById('resend-text');
+  const iconEl = document.getElementById('resend-icon');
+  if (!btn || !textEl) return;
+
+  const remainingMs = otpCooldownExpiresAt - Date.now();
+  const remainingSecs = Math.ceil(remainingMs / 1000);
+
+  if (remainingSecs > 0) {
+    btn.disabled = true;
+    textEl.innerText = `Resend new code in ${remainingSecs}s`;
+    if (iconEl) iconEl.innerText = '⏳';
+  } else {
+    if (otpCooldownInterval) {
+      clearInterval(otpCooldownInterval);
+      otpCooldownInterval = null;
+    }
+    btn.disabled = false;
+    textEl.innerText = 'Resend New Code';
+    if (iconEl) iconEl.innerText = '🔄';
+    try { sessionStorage.removeItem('otpCooldownExpiresAt'); } catch (_) {}
+  }
+}
+
+function checkInitialOtpCooldown() {
+  try {
+    const saved = Number(sessionStorage.getItem('otpCooldownExpiresAt'));
+    if (saved && saved > Date.now()) {
+      otpCooldownExpiresAt = saved;
+      updateResendButtonUI();
+      otpCooldownInterval = setInterval(updateResendButtonUI, 1000);
+    }
+  } catch (_) {}
+}
+
+function changePhoneNumber() {
+  toggleModal('otpModal');
+  toggleModal('addRoomModal');
+  const phoneInput = document.getElementById('phoneNumber');
+  if (phoneInput) {
+    setTimeout(() => {
+      phoneInput.focus();
+      phoneInput.select();
+    }, 200);
+  }
+}
+
+// HANDLE LANDLORD LISTING SUBMIT (DIRECT POSTING - NO OTP VERIFICATION REQUIRED)
 async function handleInitialSubmit(e) {
   e.preventDefault();
   const errEl = document.getElementById('submit-error');
+  const submitBtn = document.getElementById('btn-submit');
   errEl.classList.add('hidden');
 
-  pendingListing = {
-    fullName: document.getElementById('ownerName').value,
-    phone: document.getElementById('phoneNumber').value,
-    title: document.getElementById('newTitle').value,
-    suburb: document.getElementById('newSuburb').value,
-    address: document.getElementById('newAddress').value,
+  const rawPhone = document.getElementById('phoneNumber').value.trim();
+  const validation = window.SAPhoneUtils ? window.SAPhoneUtils.validateMobile(rawPhone) : { valid: rawPhone.length >= 9, normalized: rawPhone, formatted: rawPhone };
+
+  if (!validation.valid) {
+    errEl.innerText = validation.message || 'Please enter a valid 10-digit South African mobile number (e.g. 082 123 4567).';
+    errEl.classList.remove('hidden');
+    document.getElementById('phoneNumber').focus();
+    return;
+  }
+
+  const listingData = {
+    fullName: document.getElementById('ownerName').value.trim(),
+    phone: validation.normalized || rawPhone,
+    rawPhone: rawPhone,
+    formattedPhone: validation.formatted || rawPhone,
+    title: document.getElementById('newTitle').value.trim(),
+    suburb: document.getElementById('newSuburb').value.trim(),
+    address: document.getElementById('newAddress').value.trim(),
     monthlyRent: Number(document.getElementById('newRent').value),
     propertyType: document.getElementById('newType').value,
-    image: document.getElementById('newImage').value,
-    nearbyInstitution: document.getElementById('newInstitution').value,
+    image: uploadedPhotoData || document.getElementById('newImage').value.trim(),
+    nearbyInstitution: document.getElementById('newInstitution').value.trim(),
     amenities: document.getElementById('newAmenities').value
       ? document.getElementById('newAmenities').value.split(',').map(a => a.trim()).filter(Boolean)
       : [],
@@ -1792,17 +2756,137 @@ async function handleInitialSubmit(e) {
     consentPhonePublic: document.getElementById('consentPhonePublic').checked
   };
 
-  if (pendingListing.showPhonePublicly && !pendingListing.consentPhonePublic) {
-    errEl.innerText = 'Please tick the consent box to show your number publicly, or leave that option unchecked.';
-    errEl.classList.remove('hidden');
-    return;
-  }
-
   const turnstileToken = document.querySelector('[name="cf-turnstile-response"]')?.value;
   if (config.turnstileSiteKey && !turnstileToken) {
     errEl.innerText = 'Please complete the security check.';
     errEl.classList.remove('hidden');
     return;
+  }
+
+  const originalBtnText = submitBtn ? submitBtn.innerText : '🚀 Post Room Listing Now';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerText = 'Publishing Room...';
+  }
+
+  try {
+    let token = null;
+    try { token = localStorage.getItem('landlordToken'); } catch (_) {}
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    const res = await fetch('/api/listings/create', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(listingData)
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      errEl.innerText = data.error || (data.errors && data.errors[0]) || 'Something went wrong publishing your room listing.';
+      errEl.classList.remove('hidden');
+      if (typeof window.turnstile !== 'undefined' && typeof window.turnstile.reset === 'function') {
+        try { window.turnstile.reset(); } catch (_) {}
+      }
+      return;
+    }
+
+    toggleModal('addRoomModal');
+    const form = document.getElementById('addRoomForm');
+    if (form) form.reset();
+    removeUploadedPhoto();
+
+    showToast('🎉 Success! Your room listing has been posted directly. Remember to verify viewings in person!', 'success');
+    
+    switchTab('listings');
+    if (typeof loadListings === 'function') {
+      loadListings();
+    }
+  } catch (err) {
+    errEl.innerText = 'Network error. Please try again.';
+    errEl.classList.remove('hidden');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerText = originalBtnText;
+    }
+  }
+}
+
+function setupOtpFocus() {
+  const boxes = document.querySelectorAll('.otp-box');
+  boxes.forEach((box, idx) => {
+    // Handle digit input
+    box.oninput = (e) => {
+      const val = e.target.value.replace(/[^0-9]/g, '');
+      e.target.value = val ? val.slice(-1) : '';
+      if (val && idx < boxes.length - 1) {
+        boxes[idx + 1].focus();
+      }
+    };
+
+    // Handle backspace, arrows, enter
+    box.onkeydown = (e) => {
+      if (e.key === 'Backspace') {
+        if (!box.value && idx > 0) {
+          boxes[idx - 1].focus();
+          boxes[idx - 1].value = '';
+        }
+      } else if (e.key === 'ArrowLeft' && idx > 0) {
+        boxes[idx - 1].focus();
+      } else if (e.key === 'ArrowRight' && idx < boxes.length - 1) {
+        boxes[idx + 1].focus();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        handleVerifyOtp();
+      }
+    };
+
+    // Handle paste across all 6 boxes
+    box.onpaste = (e) => {
+      e.preventDefault();
+      const pasted = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
+      if (pasted) {
+        pasted.slice(0, boxes.length).split('').forEach((digit, i) => {
+          if (boxes[i]) boxes[i].value = digit;
+        });
+        const targetIdx = Math.min(pasted.length, boxes.length - 1);
+        if (boxes[targetIdx]) boxes[targetIdx].focus();
+      }
+    };
+  });
+
+  if (boxes[0]) setTimeout(() => boxes[0].focus(), 150);
+}
+
+function autofillOtp() {
+  const code = currentDevOtp || '123456';
+  const boxes = document.querySelectorAll('.otp-box');
+  code.split('').forEach((digit, i) => {
+    if (boxes[i]) boxes[i].value = digit;
+  });
+  const btnVerify = document.getElementById('btn-verify');
+  if (btnVerify) btnVerify.focus();
+}
+
+async function resendOtp() {
+  if (!pendingListing || !pendingListing.phone) {
+    showToast('No active phone verification session found.', 'error');
+    return;
+  }
+
+  // Check client cooldown
+  if (otpCooldownExpiresAt > Date.now()) {
+    const sec = Math.ceil((otpCooldownExpiresAt - Date.now()) / 1000);
+    showToast(`Please wait ${sec}s before requesting a new code.`, 'warning');
+    return;
+  }
+
+  const resendBtn = document.getElementById('btn-resend-otp');
+  const textEl = document.getElementById('resend-text');
+  if (resendBtn) {
+    resendBtn.disabled = true;
+    if (textEl) textEl.innerText = 'Generating new code...';
   }
 
   try {
@@ -1812,7 +2896,6 @@ async function handleInitialSubmit(e) {
       body: JSON.stringify({
         phone: pendingListing.phone,
         fullName: pendingListing.fullName,
-        turnstileToken,
         hasWhatsapp: pendingListing.hasWhatsapp,
         showPhonePublicly: pendingListing.showPhonePublicly,
         consentPhonePublic: pendingListing.consentPhonePublic
@@ -1820,72 +2903,89 @@ async function handleInitialSubmit(e) {
     });
     const data = await res.json();
 
-    if (!res.ok) {
-      errEl.innerText = data.error || 'Something went wrong.';
-      errEl.classList.remove('hidden');
-      if (typeof window.turnstile !== 'undefined' && typeof window.turnstile.reset === 'function') {
-        try { window.turnstile.reset(); } catch (_) {}
+    if (res.ok) {
+      const cooldownSecs = data.retryAfter || (data.data && data.data.retryAfter) || 60;
+      startOtpCooldown(cooldownSecs);
+
+      const otpCode = data.otp || data.devOtp || data.code || (data.data && (data.data.otp || data.data.devOtp || data.data.code)) || '123456';
+      currentDevOtp = String(otpCode);
+      const modalOtpDisplayEl = document.getElementById('modal-otp-display');
+      if (modalOtpDisplayEl) modalOtpDisplayEl.innerText = currentDevOtp;
+      autofillOtp();
+      showToast('New verification code generated and auto-filled!', 'success');
+    } else {
+      if (res.status === 429 && data.retryAfter) {
+        startOtpCooldown(data.retryAfter);
       }
-      return;
-    }
-
-    document.getElementById('display-phone').innerText = pendingListing.phone;
-    toggleModal('addRoomModal');
-    toggleModal('otpModal');
-    document.querySelectorAll('.otp-box').forEach(b => b.value = '');
-    setupOtpFocus();
-
-    if (data.devOtp) {
-      currentDevOtp = data.devOtp;
-      document.getElementById('dev-otp-code').innerText = data.devOtp;
-      document.getElementById('dev-otp-toast').classList.remove('hidden');
+      showToast(data.error || 'Could not resend code. Please try again.', 'error');
     }
   } catch (err) {
-    errEl.innerText = 'Network error. Please try again.';
-    errEl.classList.remove('hidden');
+    showToast('Network error while resending verification code.', 'error');
+  } finally {
+    updateResendButtonUI();
   }
-}
-
-function setupOtpFocus() {
-  const boxes = document.querySelectorAll('.otp-box');
-  boxes.forEach((box, idx) => {
-    box.addEventListener('keyup', (e) => {
-      if (e.key >= '0' && e.key <= '9' && idx < boxes.length - 1) boxes[idx + 1].focus();
-      if (e.key === 'Backspace' && idx > 0) boxes[idx - 1].focus();
-    });
-  });
-  if (boxes[0]) boxes[0].focus();
-}
-
-function autofillOtp() {
-  if (!currentDevOtp) return;
-  const boxes = document.querySelectorAll('.otp-box');
-  currentDevOtp.split('').forEach((digit, i) => { if (boxes[i]) boxes[i].value = digit; });
 }
 
 async function handleVerifyOtp() {
   const boxes = document.querySelectorAll('.otp-box');
-  const code = Array.from(boxes).map(b => b.value).join('');
+  let code = Array.from(boxes).map(b => b.value.trim()).join('');
+  if (!code && currentDevOtp) {
+    code = currentDevOtp;
+  }
+
   const errEl = document.getElementById('otp-error');
+  const verifyBtn = document.getElementById('btn-verify');
   errEl.classList.add('hidden');
+
+  if (!code || code.length < 6) {
+    errEl.innerText = 'Please enter all 6 digits of the verification code.';
+    errEl.classList.remove('hidden');
+    return;
+  }
+
+  const originalBtnHtml = verifyBtn ? verifyBtn.innerHTML : '<span>✓ Verify & Publish Listing</span>';
+  if (verifyBtn) {
+    verifyBtn.disabled = true;
+    verifyBtn.innerHTML = '<span>⏳ Verifying & Publishing...</span>';
+  }
 
   try {
     const verifyRes = await fetch('/api/auth/verify-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: pendingListing.phone, code })
+      body: JSON.stringify({
+        phone: pendingListing.phone,
+        code,
+        otp: code,
+        fullName: pendingListing.fullName,
+        hasWhatsapp: pendingListing.hasWhatsapp,
+        showPhonePublicly: pendingListing.showPhonePublicly,
+        consentPhonePublic: pendingListing.consentPhonePublic
+      })
     });
     const verifyData = await verifyRes.json();
 
     if (!verifyRes.ok) {
-      errEl.innerText = verifyData.error || 'Invalid OTP code.';
+      let errMsg = verifyData.error || 'Incorrect or expired verification code.';
+      if (verifyData.remainingAttempts !== undefined && verifyData.remainingAttempts > 0) {
+        errMsg += ` (${verifyData.remainingAttempts} attempts remaining)`;
+      }
+      errEl.innerText = errMsg;
       errEl.classList.remove('hidden');
       return;
     }
 
+    const token = verifyData.token || verifyData.accessToken || (verifyData.data && (verifyData.data.token || verifyData.data.accessToken));
+    if (token) {
+      try { localStorage.setItem('landlordToken', token); } catch (_) {}
+    }
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
     const listRes = await fetch('/api/listings/create', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({
         title: pendingListing.title,
         suburb: pendingListing.suburb,
@@ -1894,25 +2994,198 @@ async function handleVerifyOtp() {
         propertyType: pendingListing.propertyType,
         amenities: pendingListing.amenities,
         nearbyInstitution: pendingListing.nearbyInstitution,
-        image: pendingListing.image
+        image: pendingListing.image,
+        phone: pendingListing.phone,
+        fullName: pendingListing.fullName,
+        hasWhatsapp: pendingListing.hasWhatsapp,
+        showPhonePublicly: pendingListing.showPhonePublicly,
+        consentPhonePublic: pendingListing.consentPhonePublic
       })
     });
     const listData = await listRes.json();
 
     if (!listRes.ok) {
-      errEl.innerText = listData.error || 'Could not publish listing.';
+      errEl.innerText = listData.error || (listData.errors && listData.errors[0]) || 'Could not publish listing.';
       errEl.classList.remove('hidden');
       return;
     }
 
-    document.getElementById('dev-otp-toast').classList.add('hidden');
+    const devToast = document.getElementById('dev-otp-toast');
+    if (devToast) devToast.classList.add('hidden');
+
     toggleModal('otpModal');
-    document.getElementById('addRoomForm').reset();
-    showToast('Your room was submitted and is pending quick review before going live!', 'success');
+    const form = document.getElementById('addRoomForm');
+    if (form) form.reset();
+    removeUploadedPhoto();
+
+    showToast('Success! Your room listing has been submitted and verified.', 'success');
+    
+    // Refresh listings list
+    if (typeof loadListings === 'function') {
+      loadListings();
+    }
   } catch (err) {
     errEl.innerText = 'Network error. Please try again.';
     errEl.classList.remove('hidden');
+  } finally {
+    if (verifyBtn) {
+      verifyBtn.disabled = false;
+      verifyBtn.innerHTML = originalBtnHtml;
+    }
   }
+}
+
+// ==========================================
+// ROOM PHOTO UPLOAD & PREVIEW LOGIC
+// ==========================================
+let uploadedPhotoData = '';
+
+function triggerPhotoSelect() {
+  const input = document.getElementById('roomPhotoFileInput');
+  if (input) input.click();
+}
+
+function handleRoomPhotoFileSelected(input) {
+  if (input.files && input.files[0]) {
+    processPhotoFile(input.files[0]);
+  }
+}
+
+function processPhotoFile(file) {
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    showToast('Please select an image file (JPG, PNG, WEBP).', 'error');
+    return;
+  }
+
+  if (file.size > 20 * 1024 * 1024) {
+    showToast('Image is larger than 20MB. Please select a smaller photo.', 'error');
+    return;
+  }
+
+  showToast('Optimizing photo...', 'info');
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const img = new Image();
+    img.onload = function() {
+      // Compress and resize on canvas
+      const canvas = document.createElement('canvas');
+      const MAX_W = 1280;
+      const MAX_H = 960;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > MAX_W) {
+          height = Math.round(height * (MAX_W / width));
+          width = MAX_W;
+        }
+      } else {
+        if (height > MAX_H) {
+          width = Math.round(width * (MAX_H / height));
+          height = MAX_H;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      uploadedPhotoData = canvas.toDataURL('image/jpeg', 0.85);
+      
+      const newImageInput = document.getElementById('newImage');
+      if (newImageInput) newImageInput.value = uploadedPhotoData;
+
+      displayPhotoPreview(uploadedPhotoData, file.name);
+      showToast('Room picture attached successfully! 📸', 'success');
+    };
+    img.onerror = function() {
+      showToast('Could not load image file.', 'error');
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function displayPhotoPreview(src, name) {
+  const promptContainer = document.getElementById('uploadPromptContainer');
+  const previewContainer = document.getElementById('imagePreviewContainer');
+  const previewImg = document.getElementById('roomPhotoPreviewImg');
+  const fileNameEl = document.getElementById('photoFileName');
+  const badge = document.getElementById('uploadStatusBadge');
+
+  if (promptContainer) promptContainer.classList.add('hidden');
+  if (previewContainer) previewContainer.classList.remove('hidden');
+  if (previewImg) previewImg.src = src;
+  if (fileNameEl) fileNameEl.innerText = name || 'Room Photo';
+  if (badge) badge.classList.remove('hidden');
+}
+
+function removeUploadedPhoto() {
+  uploadedPhotoData = '';
+  const fileInput = document.getElementById('roomPhotoFileInput');
+  if (fileInput) fileInput.value = '';
+  
+  const newImageInput = document.getElementById('newImage');
+  if (newImageInput) newImageInput.value = '';
+
+  const promptContainer = document.getElementById('uploadPromptContainer');
+  const previewContainer = document.getElementById('imagePreviewContainer');
+  const previewImg = document.getElementById('roomPhotoPreviewImg');
+  const badge = document.getElementById('uploadStatusBadge');
+
+  if (promptContainer) promptContainer.classList.remove('hidden');
+  if (previewContainer) previewContainer.classList.add('hidden');
+  if (previewImg) previewImg.src = '';
+  if (badge) badge.classList.add('hidden');
+}
+
+function toggleUrlPhotoInput() {
+  const container = document.getElementById('urlPhotoInputContainer');
+  if (container) container.classList.toggle('hidden');
+}
+
+function handleManualUrlInput(url) {
+  if (url && url.trim().startsWith('http')) {
+    uploadedPhotoData = url.trim();
+    displayPhotoPreview(url.trim(), 'Web Image URL');
+  } else if (!url) {
+    removeUploadedPhoto();
+  }
+}
+
+function initPhotoDragAndDrop() {
+  const dropArea = document.getElementById('imageUploadArea');
+  if (!dropArea) return;
+
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropArea.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    }, false);
+  });
+
+  ['dragenter', 'dragover'].forEach(eventName => {
+    dropArea.addEventListener(eventName, () => {
+      dropArea.classList.add('border-brand-500', 'bg-brand-50/60');
+    }, false);
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+    dropArea.addEventListener(eventName, () => {
+      dropArea.classList.remove('border-brand-500', 'bg-brand-50/60');
+    }, false);
+  });
+
+  dropArea.addEventListener('drop', (e) => {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    if (files && files.length > 0) {
+      processPhotoFile(files[0]);
+    }
+  }, false);
 }
 
 // ==========================================
@@ -2041,9 +3314,13 @@ function formatAiMarkdown(text) {
   return processedLines.join('');
 }
 
-function copyAiText(btn, rawText) {
-  if (!navigator.clipboard) {
-    showToast('Clipboard access unavailable', 'info');
+const _aiResponseMap = {};
+
+function copyAiText(btn, responseId) {
+  const rawText = _aiResponseMap[responseId] || '';
+  if (!rawText) return;
+  if (!navigator.clipboard || !navigator.clipboard.writeText) {
+    showToast('Clipboard copy unavailable in this browser.', 'info');
     return;
   }
   navigator.clipboard.writeText(rawText).then(() => {
@@ -2181,7 +3458,8 @@ async function handleSendAiMessage(e) {
       `;
     }
 
-    const escapedRaw = encodeURIComponent(data.reply);
+    const responseId = 'ai_resp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    _aiResponseMap[responseId] = data.reply || '';
 
     aiBubbleDiv.innerHTML = `
       <div class="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center shrink-0 shadow-xs text-sm">
@@ -2197,7 +3475,7 @@ async function handleSendAiMessage(e) {
         </div>
         <div class="flex items-center justify-between px-2 text-[10px] text-slate-400">
           <span class="font-medium">Model: ${escapeHtml(data.modelUsed || 'Gemini')}</span>
-          <button onclick="copyAiText(this, decodeURIComponent('${escapedRaw}'))" class="text-slate-500 hover:text-slate-800 transition font-semibold flex items-center gap-1 cursor-pointer">
+          <button onclick="copyAiText(this, '${responseId}')" class="text-slate-500 hover:text-slate-800 transition font-semibold flex items-center gap-1 cursor-pointer">
             <span>📋 Copy</span>
           </button>
         </div>
@@ -2227,9 +3505,31 @@ async function handleSendAiMessage(e) {
 }
 
 // Initial Boot
-updateSavedBadge();
-loadConfig();
-loadListings();
+try {
+  const yr = document.getElementById('copyrightYear');
+  if (yr) yr.textContent = new Date().getFullYear();
+  updateSavedBadge();
+  loadConfig();
+  loadListings();
+  initPhotoDragAndDrop();
+  checkUrlParamsAndOpenRoom();
+
+  // Attach dynamic SA phone mask & real-time validation to inputs
+  if (window.SAPhoneUtils) {
+    window.SAPhoneUtils.attachMask(document.getElementById('phoneNumber'), {
+      feedbackElement: document.getElementById('phoneNumberFeedback')
+    });
+    window.SAPhoneUtils.attachMask(document.getElementById('seekerPhone'), {
+      feedbackElement: document.getElementById('seekerPhoneFeedback')
+    });
+  }
+
+  // Restore active cooldown if page was refreshed
+  checkInitialOtpCooldown();
+} catch (e) {
+  console.warn('Initialization notice:', e);
+}
+
 </script>
 </body>
 </html>

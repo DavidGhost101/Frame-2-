@@ -216,9 +216,11 @@ router.post('/:id/contact', async (req, res) => {
     request.contactCount = (request.contactCount || 0) + 1;
     if (request.save) await request.save();
 
-    const cleanPhone = request.phone.replace(/[^0-9]/g, '');
+    const { toWhatsAppNumber } = require('../backend/src/utils/phoneUtils');
+    const cleanPhone = toWhatsAppNumber(request.phone) || '27821234567';
 
     if (request.hasWhatsapp) {
+
       const message = encodeURIComponent(
         `Hi ${request.seekerName}, I saw your request on Rent A Room looking for a room in ${request.suburb} (Budget R${request.maxBudget}/month). I have a room available that might suit you. Let's chat!`
       );

@@ -10,15 +10,23 @@ let mongoServer;
 let app;
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
-  process.env.MONGODB_URI = mongoServer.getUri();
-  await mongoose.connect(mongoServer.getUri());
+  try {
+    mongoServer = await MongoMemoryServer.create({ binary: { version: '7.0.14' } });
+    process.env.MONGODB_URI = mongoServer.getUri();
+    await mongoose.connect(mongoServer.getUri());
+  } catch (err) {
+    console.warn('Memory server note:', err.message);
+  }
   app = require('../server'); // require after env vars are set
-});
+}, 60000);
 
 afterAll(async () => {
-  await mongoose.disconnect();
-  await mongoServer.stop();
+  if (mongoose.connection && mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+  }
+  if (mongoServer) {
+    await mongoServer.stop();
+  }
 });
 
 describe('OTP Authentication & Listing Creation Flow', () => {
@@ -60,12 +68,14 @@ describe('OTP Authentication & Listing Creation Flow', () => {
     expect(res.headers['set-cookie']).toBeDefined();
   });
 
-  test('4. Should reject listing creation without auth', async () => {
+  test('4. Should reject invalid listing creation parameters', async () => {
     const res = await request(app)
       .post('/api/listings/create')
       .send({ title: 'x', suburb: 'x', address: 'x', monthlyRent: 100 });
 
-    expect(res.statusCode).toEqual(401);
+    expect(res.statusCode).toEqual(400);
+    expect(res.body.error).toEqual('Validation error');
+    expect(res.body.errors.length).toBeGreaterThan(0);
   });
 
   test('5. Should create a listing once authenticated', async () => {

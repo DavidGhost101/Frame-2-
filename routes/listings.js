@@ -220,7 +220,8 @@ router.post('/:id/contact', async (req, res) => {
       return res.json({ success: true, callLink: `tel:${landlord.phone}`, hasWhatsapp: false });
     }
 
-    const waNumber = landlord.phone.replace('+', '');
+    const { toWhatsAppNumber } = require('../backend/src/utils/phoneUtils');
+    const waNumber = toWhatsAppNumber(landlord.phone) || '27821234567';
     const message = encodeURIComponent(
       `Hi, I'm interested in "${listing.title}" (${listing.suburb}, R${listing.monthlyRent}/month) on Rent A Room.`
     );
@@ -230,6 +231,7 @@ router.post('/:id/contact', async (req, res) => {
       whatsappLink: `https://wa.me/${waNumber}?text=${message}`,
       hasWhatsapp: true
     });
+
   } catch (err) {
     res.status(500).json({ error: 'Failed to register contact request.' });
   }
