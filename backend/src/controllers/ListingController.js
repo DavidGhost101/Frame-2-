@@ -36,6 +36,15 @@ class ListingController {
 
   async createListing(req, res, next) {
     try {
+      if (req.user) {
+        if (!req.body.fullName && !req.body.ownerName && !req.body.landlordFullName && !req.body.landlordName) {
+          req.body.fullName = req.user.fullName || req.user.name || 'Landlord';
+        }
+        if (!req.body.phone && req.user.phone) {
+          req.body.phone = req.user.phone;
+        }
+      }
+
       const validation = ListingValidator.validateCreate(req.body);
       if (!validation.isValid) {
         return ApiResponse.error(res, 'Validation error', 400, validation.errors);
@@ -48,6 +57,9 @@ class ListingController {
         listing
       });
     } catch (err) {
+      if (err.statusCode === 403 || err.code === 'LANDLORD_BLOCKED') {
+        return ApiResponse.error(res, err.message, 403, [], 'LANDLORD_BLOCKED');
+      }
       next(err);
     }
   }

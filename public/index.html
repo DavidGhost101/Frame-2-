@@ -3,7 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Rent A Room Soweto | Township Room Rentals & Room Seekers</title>
+<title>Rent A Room</title>
+<meta name="description" content="Township room and backroom listing and room seeker platform for Soweto and surrounds with verified WhatsApp contact. Designed and built by David Rakosa." />
+<meta property="og:title" content="Rent A Room" />
+<meta property="og:description" content="Township room and backroom listing and room seeker platform for Soweto and surrounds with verified WhatsApp contact. Designed and built by David Rakosa." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -149,19 +152,22 @@
     <div class="pt-2">
       <div class="flex items-center justify-center gap-1.5 flex-wrap max-w-3xl mx-auto text-xs font-semibold">
         <span class="text-slate-400 font-bold uppercase tracking-wider text-[10px] mr-1 hidden sm:inline">Popular:</span>
-        <button onclick="setSuburbPill('All')" class="suburb-pill bg-slate-900 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition">All Areas</button>
-        <button onclick="setSuburbPill('Dobsonville')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition">Dobsonville</button>
-        <button onclick="setSuburbPill('Orlando')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition">Orlando</button>
-        <button onclick="setSuburbPill('Pimville')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition">Pimville</button>
-        <button onclick="setSuburbPill('Diepkloof')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition">Diepkloof</button>
-        <button onclick="setSuburbPill('Protea Glen')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition">Protea Glen</button>
-        <button onclick="setSuburbPill('Meadowlands')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition">Meadowlands</button>
-        <button onclick="setSuburbPill('Jabulani')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition">Jabulani</button>
+        <button onclick="setSuburbPill('All')" class="suburb-pill bg-slate-900 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer">All Areas</button>
+        <button onclick="setSuburbPill('Dobsonville')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer">Dobsonville</button>
+        <button onclick="setSuburbPill('Orlando')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer">Orlando</button>
+        <button onclick="setSuburbPill('Pimville')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer">Pimville</button>
+        <button onclick="setSuburbPill('Diepkloof')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer">Diepkloof</button>
+        <button onclick="setSuburbPill('Protea Glen')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer">Protea Glen</button>
+        <button onclick="setSuburbPill('Meadowlands')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer">Meadowlands</button>
+        <button onclick="setSuburbPill('Jabulani')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer">Jabulani</button>
+        <button id="wifiQuickPill" onclick="toggleWifiQuickFilter()" class="suburb-pill bg-white text-brand-700 hover:bg-brand-50 border border-brand-200 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs">
+          <span>📶</span> <span>WiFi Included</span>
+        </button>
       </div>
     </div>
 
     <!-- FILTER BAR FOR ROOM LISTINGS -->
-    <div id="listingsFilterBar" class="mt-4 bg-white p-4 sm:p-5 rounded-2xl shadow-lg border border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-3 text-left">
+    <div id="listingsFilterBar" class="mt-4 bg-white p-4 sm:p-5 rounded-2xl shadow-lg border border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-left">
       <div>
         <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Search Suburb / Area</label>
         <input id="suburbFilter" type="text" placeholder="e.g. Dobsonville or UJ" oninput="debouncedLoadListings()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none" />
@@ -189,9 +195,16 @@
           <option value="Apartment">1-Bed Apartment</option>
         </select>
       </div>
+      <div>
+        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">WiFi / Internet</label>
+        <select id="wifiFilter" onchange="onWifiFilterChange()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
+          <option value="">All Rooms</option>
+          <option value="wifi">📶 WiFi Included</option>
+        </select>
+      </div>
       <div class="flex items-end gap-2">
-        <button onclick="resetListingFilters()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm py-2.5 px-4 rounded-xl transition shadow-xs">
-          Reset
+        <button onclick="resetListingFilters()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm py-2.5 px-4 rounded-xl transition shadow-xs cursor-pointer">
+          Reset Filters
         </button>
       </div>
     </div>
@@ -872,8 +885,9 @@
     <form id="addSeekerForm" onsubmit="handleSeekerSubmit(event)" class="space-y-4">
 
       <div>
-        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Your Full Name</label>
-        <input type="text" id="seekerName" required placeholder="e.g. Lerato Mthembu" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500" />
+        <label for="seekerName" class="block text-xs font-bold text-slate-700 uppercase mb-1">Your Full Name</label>
+        <input type="text" id="seekerName" required placeholder="e.g. Lerato Mthembu" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500" oninput="validateNameInput(this, 'seekerNameError')" />
+        <div id="seekerNameError" class="hidden text-xs text-red-500 font-semibold mt-1">Please enter a valid name using letters only.</div>
       </div>
 
       <div>
@@ -974,10 +988,11 @@
       </p>
     </div>
 
-    <form id="addRoomForm" onsubmit="handleInitialSubmit(event)" class="space-y-4">
+    <form id="addRoomForm" novalidate onsubmit="handleInitialSubmit(event)" class="space-y-4">
       <div>
-        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Landlord Full Name</label>
-        <input type="text" id="ownerName" required placeholder="e.g. Sipho Ndlovu" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" />
+        <label for="ownerName" class="block text-xs font-bold text-slate-700 uppercase mb-1">Landlord Full Name</label>
+        <input type="text" id="ownerName" required placeholder="e.g. Sipho Ndlovu" class="w-full border border-slate-300 rounded-xl p-2.5 text-sm outline-none focus:ring-2 focus:ring-brand-500" oninput="validateNameInput(this, 'ownerNameError')" />
+        <div id="ownerNameError" class="hidden text-xs text-red-500 font-semibold mt-1">Please enter a valid name using letters only.</div>
       </div>
       <div>
         <div class="flex items-center justify-between mb-1">
@@ -1025,60 +1040,120 @@
       </div>
 
       <!-- PHOTO UPLOAD SECTION -->
-      <div class="space-y-1.5">
+      <div class="space-y-2">
         <div class="flex items-center justify-between">
           <label class="block text-xs font-bold text-slate-700 uppercase">Room Photo</label>
-          <span class="text-[11px] text-slate-400 font-medium">Upload photo or enter URL</span>
+          <span id="uploadStatusBadge" class="hidden text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">Photo Attached ✓</span>
         </div>
 
         <!-- Photo Upload Dropzone / Button -->
-        <div id="imageUploadArea" class="border-2 border-dashed border-slate-300 hover:border-brand-500 bg-slate-50 hover:bg-brand-50/40 rounded-2xl p-4 text-center transition cursor-pointer relative group" onclick="triggerPhotoSelect()">
+        <div id="imageUploadArea" class="border-2 border-dashed border-slate-300 hover:border-brand-500 bg-slate-50 hover:bg-brand-50/30 rounded-2xl p-4 text-center transition relative group">
           <input type="file" id="roomPhotoFileInput" accept="image/*" class="hidden" onchange="handleRoomPhotoFileSelected(this)" />
+          <input type="file" id="roomPhotoCameraInput" accept="image/*" capture="environment" class="hidden" onchange="handleRoomPhotoFileSelected(this)" />
           
+          <!-- Optimizing Progress Indicator -->
+          <div id="photoOptimizingIndicator" class="hidden p-4 space-y-2">
+            <div class="w-10 h-10 mx-auto rounded-xl bg-brand-500/10 text-brand-600 flex items-center justify-center">
+              <span class="inline-block w-5 h-5 border-2 border-brand-500/30 border-t-brand-600 rounded-full animate-spin"></span>
+            </div>
+            <p class="text-xs font-bold text-slate-800">Optimizing & resizing picture...</p>
+            <p class="text-[10px] text-slate-500">Preparing high-quality compact image for your listing</p>
+          </div>
+
           <!-- Upload Prompt UI -->
-          <div id="uploadPromptContainer" class="space-y-2">
+          <div id="uploadPromptContainer" class="space-y-3">
             <div class="w-12 h-12 mx-auto rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center text-2xl group-hover:scale-105 transition shadow-xs">
               📸
             </div>
             <div>
               <p class="text-xs font-bold text-slate-800">
-                <span class="text-brand-600 underline">Upload Room Picture</span> or drag & drop
+                Add pictures of the room or yard
               </p>
-              <p class="text-[11px] text-slate-500 mt-0.5">Supports Camera / Gallery / JPG, PNG, WEBP</p>
+              <p class="text-[11px] text-slate-500 mt-0.5">Choose from your files, snap with your camera, or pick a sample</p>
             </div>
-            <button type="button" onclick="event.stopPropagation(); triggerPhotoSelect();" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-slate-300 hover:border-brand-500 text-slate-700 hover:text-brand-600 text-xs font-bold shadow-2xs transition">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-              <span>Choose Photo</span>
-            </button>
+            
+            <!-- Picture Action Buttons -->
+            <div class="flex flex-wrap justify-center gap-2 pt-1">
+              <button type="button" onclick="triggerPhotoSelect()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:border-brand-500 text-slate-800 hover:text-brand-600 text-xs font-bold shadow-2xs transition cursor-pointer">
+                <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                <span>Upload from Device</span>
+              </button>
+              <button type="button" onclick="triggerCameraCapture()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-50 border border-brand-300 hover:border-brand-500 text-brand-700 hover:bg-brand-100 text-xs font-bold shadow-2xs transition cursor-pointer">
+                <span>📷</span>
+                <span>Take Photo</span>
+              </button>
+            </div>
           </div>
 
           <!-- Preview Container (shown when photo is selected) -->
           <div id="imagePreviewContainer" class="hidden relative">
-            <div class="relative w-full h-44 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shadow-inner">
+            <div class="relative w-full h-48 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shadow-inner">
               <img id="roomPhotoPreviewImg" src="" alt="Room preview" class="w-full h-full object-cover" />
-              <div class="absolute top-2 right-2 flex gap-1">
-                <button type="button" onclick="event.stopPropagation(); removeUploadedPhoto();" class="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-md cursor-pointer transition">
+              <div class="absolute top-2 right-2 flex gap-1.5">
+                <button type="button" onclick="triggerPhotoSelect()" class="px-2.5 py-1 bg-slate-900/80 hover:bg-slate-900 text-white rounded-lg text-xs font-bold shadow-md cursor-pointer transition">
+                  ✏️ Change
+                </button>
+                <button type="button" onclick="removeUploadedPhoto()" class="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-md cursor-pointer transition">
                   ✕ Remove
                 </button>
               </div>
               <div class="absolute bottom-2 left-2 px-2.5 py-1 bg-black/75 text-white text-[11px] font-bold rounded-md backdrop-blur-xs flex items-center gap-1">
-                <span>✓ Photo ready</span>
-                <span id="photoFileName" class="text-slate-300 font-normal max-w-[160px] truncate"></span>
+                <span>✓ Photo Attached</span>
+                <span id="photoFileName" class="text-slate-300 font-normal max-w-[180px] truncate ml-1"></span>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- Sample Photo Presets -->
+        <div class="pt-1">
+          <p class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Or choose sample room photo:</p>
+          <div class="grid grid-cols-3 sm:grid-cols-5 gap-1.5 text-center">
+            <button type="button" onclick="selectPresetPhoto('/images/township_ensuite.jpg', 'Modern Ensuite Backroom')" class="photo-preset-btn p-1.5 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-left text-xs transition cursor-pointer">
+              <div class="w-full h-12 rounded-lg overflow-hidden mb-1 bg-slate-200">
+                <img src="/images/township_ensuite.jpg" class="w-full h-full object-cover" alt="Ensuite" referrerpolicy="no-referrer" />
+              </div>
+              <p class="font-bold text-[10px] text-slate-700 truncate">Ensuite</p>
+            </button>
+            <button type="button" onclick="selectPresetPhoto('/images/township_backroom.jpg', 'Township Backroom')" class="photo-preset-btn p-1.5 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-left text-xs transition cursor-pointer">
+              <div class="w-full h-12 rounded-lg overflow-hidden mb-1 bg-slate-200">
+                <img src="/images/township_backroom.jpg" class="w-full h-full object-cover" alt="Backroom" referrerpolicy="no-referrer" />
+              </div>
+              <p class="font-bold text-[10px] text-slate-700 truncate">Backroom</p>
+            </button>
+            <button type="button" onclick="selectPresetPhoto('/images/converted_garage.jpg', 'Converted Garage')" class="photo-preset-btn p-1.5 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-left text-xs transition cursor-pointer">
+              <div class="w-full h-12 rounded-lg overflow-hidden mb-1 bg-slate-200">
+                <img src="/images/converted_garage.jpg" class="w-full h-full object-cover" alt="Garage" referrerpolicy="no-referrer" />
+              </div>
+              <p class="font-bold text-[10px] text-slate-700 truncate">Garage</p>
+            </button>
+            <button type="button" onclick="selectPresetPhoto('/images/student_room.jpg', 'Student Room')" class="photo-preset-btn p-1.5 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-left text-xs transition cursor-pointer">
+              <div class="w-full h-12 rounded-lg overflow-hidden mb-1 bg-slate-200">
+                <img src="/images/student_room.jpg" class="w-full h-full object-cover" alt="Student" referrerpolicy="no-referrer" />
+              </div>
+              <p class="font-bold text-[10px] text-slate-700 truncate">Student</p>
+            </button>
+            <button type="button" onclick="selectPresetPhoto('/images/converted_garage.jpg', 'Garage Flatlet')" class="photo-preset-btn p-1.5 bg-slate-50 hover:bg-white border border-slate-200 rounded-xl text-left text-xs transition cursor-pointer">
+              <div class="w-full h-12 rounded-lg overflow-hidden mb-1 bg-slate-200">
+                <img src="/images/converted_garage.jpg" class="w-full h-full object-cover" alt="Garage Flatlet" referrerpolicy="no-referrer" />
+              </div>
+              <p class="font-bold text-[10px] text-slate-700 truncate">Flatlet</p>
+            </button>
           </div>
         </div>
 
         <!-- Toggle URL input -->
         <div class="flex items-center justify-between pt-1">
           <button type="button" onclick="toggleUrlPhotoInput()" class="text-[11px] font-semibold text-slate-500 hover:text-brand-600 transition flex items-center gap-1 cursor-pointer">
-            <span>🔗 Or paste image URL</span>
+            <span>🔗 Or paste image link</span>
           </button>
-          <span id="uploadStatusBadge" class="hidden text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">Photo Attached ✓</span>
         </div>
 
         <div id="urlPhotoInputContainer" class="hidden pt-1">
-          <input type="url" id="newImage" placeholder="https://images.unsplash.com/..." oninput="handleManualUrlInput(this.value)" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-brand-500" />
+          <div class="flex gap-2">
+            <input type="text" id="newImage" placeholder="https://images.unsplash.com/..." oninput="handleManualUrlInput(this.value)" class="w-full border border-slate-300 rounded-xl p-2.5 text-xs outline-none focus:ring-2 focus:ring-brand-500" />
+            <button type="button" onclick="handleManualUrlInput(document.getElementById('newImage').value)" class="px-3 py-2 bg-slate-800 text-white rounded-xl text-xs font-bold cursor-pointer hover:bg-slate-700">Preview</button>
+          </div>
         </div>
       </div>
       <div id="institutionField" class="hidden">
@@ -1346,6 +1421,36 @@ function escapeHtml(str) {
   return String(str || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
+// Person name validation (Enforces letters only - rejects numbers like David123, 123456, John99)
+function validatePersonName(val) {
+  if (!val || typeof val !== 'string') return { valid: false, message: 'Please enter a valid name using letters only.' };
+  const trimmed = val.trim();
+  if (trimmed.length < 2) return { valid: false, message: 'Name must be at least 2 characters.' };
+  if (/\d/.test(trimmed)) return { valid: false, message: 'Please enter a valid name using letters only.' };
+  if (!/^[a-zA-Z\u00C0-\u024F\s.'-]+$/.test(trimmed) || trimmed.replace(/[^a-zA-Z]/g, '').length < 2) {
+    return { valid: false, message: 'Please enter a valid name using letters only.' };
+  }
+  return { valid: true, normalized: trimmed };
+}
+
+function validateNameInput(inputEl, errorElId) {
+  if (!inputEl) return;
+  const val = inputEl.value;
+  const errEl = errorElId ? document.getElementById(errorElId) : null;
+  if (/\d/.test(val)) {
+    inputEl.classList.add('border-red-500', 'focus:ring-red-500');
+    if (errEl) {
+      errEl.innerText = 'Please enter a valid name using letters only.';
+      errEl.classList.remove('hidden');
+    }
+  } else {
+    inputEl.classList.remove('border-red-500', 'focus:ring-red-500');
+    if (errEl) {
+      errEl.classList.add('hidden');
+    }
+  }
+}
+
 let currentTab = 'listings';
 let pendingListing = {};
 let currentDevOtp = null;
@@ -1608,11 +1713,14 @@ async function loadListings() {
   const suburb = document.getElementById('suburbFilter').value.trim();
   const maxRent = document.getElementById('priceFilter').value;
   const propertyType = document.getElementById('typeFilter').value;
+  const wifiFilterEl = document.getElementById('wifiFilter');
+  const wifiVal = wifiFilterEl ? wifiFilterEl.value : '';
 
   const params = new URLSearchParams();
   if (suburb) params.set('suburb', suburb);
   if (maxRent) params.set('maxRent', maxRent);
   if (propertyType && propertyType !== 'All') params.set('propertyType', propertyType);
+  if (wifiVal === 'wifi') params.set('wifi', 'true');
 
   try {
     const res = await fetch('/api/listings?' + params.toString());
@@ -1635,7 +1743,14 @@ function renderListingsGrid(items) {
 
   let displayItems = items;
   if (filterOnlyFavorites) {
-    displayItems = items.filter(r => savedListingIds.includes(r._id));
+    displayItems = displayItems.filter(r => savedListingIds.includes(r._id));
+  }
+  const wifiFilterEl = document.getElementById('wifiFilter');
+  if (wifiFilterEl && wifiFilterEl.value === 'wifi') {
+    displayItems = displayItems.filter(r => {
+      const allText = ((r.amenities || []).join(' ') + ' ' + (r.title || '') + ' ' + (r.description || '')).toLowerCase();
+      return allText.includes('wifi') || allText.includes('wi-fi') || allText.includes('internet');
+    });
   }
 
   countEl.innerText = `Showing ${displayItems.length} room${displayItems.length === 1 ? '' : 's'}`;
@@ -2465,10 +2580,37 @@ async function reportListing(id) {
   }
 }
 
+function onWifiFilterChange() {
+  updateWifiPillState();
+  loadListings();
+}
+
+function toggleWifiQuickFilter() {
+  const select = document.getElementById('wifiFilter');
+  if (!select) return;
+  select.value = select.value === 'wifi' ? '' : 'wifi';
+  updateWifiPillState();
+  loadListings();
+}
+
+function updateWifiPillState() {
+  const select = document.getElementById('wifiFilter');
+  const pill = document.getElementById('wifiQuickPill');
+  if (!pill || !select) return;
+  if (select.value === 'wifi') {
+    pill.className = 'suburb-pill bg-brand-600 text-white border border-brand-700 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs';
+  } else {
+    pill.className = 'suburb-pill bg-white text-brand-700 hover:bg-brand-50 border border-brand-200 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs';
+  }
+}
+
 function resetListingFilters() {
   document.getElementById('suburbFilter').value = '';
   document.getElementById('priceFilter').value = '';
   document.getElementById('typeFilter').value = 'All';
+  const wifiSelect = document.getElementById('wifiFilter');
+  if (wifiSelect) wifiSelect.value = '';
+  updateWifiPillState();
   filterOnlyFavorites = false;
   const btn = document.getElementById('filterOnlySavedBtn');
   if (btn) btn.className = 'text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1';
@@ -2590,66 +2732,111 @@ function openSeekerModal() {
 }
 
 // HANDLE ROOM SEEKER SUBMIT
+let isSubmittingSeeker = false;
+
 async function handleSeekerSubmit(e) {
   e.preventDefault();
+  if (isSubmittingSeeker) return;
+
   const errEl = document.getElementById('seeker-error');
-  errEl.classList.add('hidden');
+  if (errEl) errEl.classList.add('hidden');
   const btn = document.getElementById('btn-seeker-submit');
+
+  const rawSeekerName = document.getElementById('seekerName').value.trim();
+  const nameVal = validatePersonName(rawSeekerName);
+  if (!nameVal.valid) {
+    if (errEl) {
+      errEl.innerText = nameVal.message;
+      errEl.classList.remove('hidden');
+    }
+    const nameErrEl = document.getElementById('seekerNameError');
+    if (nameErrEl) {
+      nameErrEl.innerText = nameVal.message;
+      nameErrEl.classList.remove('hidden');
+    }
+    document.getElementById('seekerName').focus();
+    return;
+  }
 
   const rawPhone = document.getElementById('seekerPhone').value.trim();
   const validation = window.SAPhoneUtils ? window.SAPhoneUtils.validateMobile(rawPhone) : { valid: rawPhone.length >= 9, normalized: rawPhone };
 
   if (!validation.valid) {
-    errEl.innerText = validation.message || 'Please enter a valid 10-digit South African mobile number (starting with 06, 07, or 08).';
-    errEl.classList.remove('hidden');
+    if (errEl) {
+      errEl.innerText = validation.message || 'Please enter a valid 10-digit South African mobile number (starting with 06, 07, or 08).';
+      errEl.classList.remove('hidden');
+    }
     document.getElementById('seekerPhone').focus();
     return;
   }
 
-  btn.disabled = true;
-  btn.innerText = 'Posting...';
+  const budgetVal = Number(document.getElementById('seekerMaxBudget').value);
+  if (!budgetVal || isNaN(budgetVal) || budgetVal < 300) {
+    if (errEl) {
+      errEl.innerText = 'Please enter a valid maximum budget (at least R300).';
+      errEl.classList.remove('hidden');
+    }
+    document.getElementById('seekerMaxBudget').focus();
+    return;
+  }
+
+  isSubmittingSeeker = true;
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = 'Posting...';
+  }
 
   const payload = {
-    seekerName: document.getElementById('seekerName').value.trim(),
+    seekerName: nameVal.normalized,
     phone: validation.normalized || rawPhone,
     hasWhatsapp: document.getElementById('seekerHasWhatsapp').checked,
     suburb: document.getElementById('seekerSuburb').value.trim(),
-    maxBudget: Number(document.getElementById('seekerMaxBudget').value),
+    maxBudget: budgetVal,
     roomType: document.getElementById('seekerRoomType').value,
     occupation: document.getElementById('seekerOccupation').value,
     moveInDate: document.getElementById('seekerMoveInDate').value.trim() || 'Immediate',
     notes: document.getElementById('seekerNotes').value.trim()
   };
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
   try {
     const res = await fetch('/api/room-requests/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: controller.signal
     });
-    const data = await res.json();
+    clearTimeout(timeoutId);
+    const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
-      errEl.innerText = data.error || (data.errors && data.errors[0]) || 'Failed to post room request.';
-      errEl.classList.remove('hidden');
-      btn.disabled = false;
-      btn.innerText = 'Post Room Request';
+      if (errEl) {
+        errEl.innerText = data.error || (data.errors && data.errors[0]) || 'Failed to post room request.';
+        errEl.classList.remove('hidden');
+      }
       return;
     }
 
     toggleModal('addSeekerModal');
     document.getElementById('addSeekerForm').reset();
-    btn.disabled = false;
-    btn.innerText = 'Post Room Request';
 
     showToast('Your room request has been posted! Landlords can now find you.', 'success');
     switchTab('seekers');
     loadSeekers();
   } catch (err) {
-    errEl.innerText = 'Network error. Please try again.';
-    errEl.classList.remove('hidden');
-    btn.disabled = false;
-    btn.innerText = 'Post Room Request';
+    clearTimeout(timeoutId);
+    if (errEl) {
+      errEl.innerText = err.name === 'AbortError' ? 'Submission timed out. Please try again.' : 'Network error. Please try again.';
+      errEl.classList.remove('hidden');
+    }
+  } finally {
+    isSubmittingSeeker = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = 'Post Room Request';
+    }
   }
 }
 
@@ -2722,46 +2909,171 @@ function changePhoneNumber() {
 // HANDLE LANDLORD LISTING SUBMIT (DIRECT POSTING - NO OTP VERIFICATION REQUIRED)
 async function handleInitialSubmit(e) {
   e.preventDefault();
+  console.log('[handleInitialSubmit] Step 1: Form submit event triggered.');
+
   const errEl = document.getElementById('submit-error');
   const submitBtn = document.getElementById('btn-submit');
-  errEl.classList.add('hidden');
+  if (errEl) errEl.classList.add('hidden');
 
-  const rawPhone = document.getElementById('phoneNumber').value.trim();
-  const validation = window.SAPhoneUtils ? window.SAPhoneUtils.validateMobile(rawPhone) : { valid: rawPhone.length >= 9, normalized: rawPhone, formatted: rawPhone };
+  // Ensure that the handleInitialSubmit function properly waits for the image upload state to stabilize
+  if (isPhotoProcessing && photoProcessingPromise) {
+    console.log('[handleInitialSubmit] Photo upload is still actively processing. Waiting for state to stabilize...');
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerText = '⏳ Finishing Photo Optimization...';
+    }
+    try {
+      await photoProcessingPromise;
+      console.log('[handleInitialSubmit] Image processing stabilization complete.');
+    } catch (photoErr) {
+      console.warn('[handleInitialSubmit] Warning: Image processing rejected while waiting:', photoErr);
+    }
+  }
 
-  if (!validation.valid) {
-    errEl.innerText = validation.message || 'Please enter a valid 10-digit South African mobile number (e.g. 082 123 4567).';
-    errEl.classList.remove('hidden');
-    document.getElementById('phoneNumber').focus();
+  // Log the state of uploadedPhotoData
+  console.log('[handleInitialSubmit] Step 2: State of uploadedPhotoData:', {
+    hasData: !!uploadedPhotoData,
+    type: typeof uploadedPhotoData,
+    length: uploadedPhotoData ? uploadedPhotoData.length : 0,
+    isDataUrl: uploadedPhotoData ? uploadedPhotoData.startsWith('data:image/') : false,
+    isPreset: uploadedPhotoData ? uploadedPhotoData.startsWith('/images/') : false,
+    isHttp: uploadedPhotoData ? uploadedPhotoData.startsWith('http') : false,
+    previewPrefix: uploadedPhotoData ? (uploadedPhotoData.length > 60 ? uploadedPhotoData.slice(0, 60) + '...' : uploadedPhotoData) : '(empty)'
+  });
+
+  // Extract form values
+  const rawOwnerName = document.getElementById('ownerName') ? document.getElementById('ownerName').value.trim() : '';
+  const rawPhone = document.getElementById('phoneNumber') ? document.getElementById('phoneNumber').value.trim() : '';
+  const titleVal = document.getElementById('newTitle') ? document.getElementById('newTitle').value.trim() : '';
+  const suburbVal = document.getElementById('newSuburb') ? document.getElementById('newSuburb').value.trim() : '';
+  const addressVal = document.getElementById('newAddress') ? document.getElementById('newAddress').value.trim() : '';
+  const rentRaw = document.getElementById('newRent') ? document.getElementById('newRent').value : '';
+  const rentVal = Number(rentRaw);
+  const typeVal = document.getElementById('newType') ? document.getElementById('newType').value : 'Backroom';
+  const turnstileToken = document.querySelector('[name="cf-turnstile-response"]')?.value;
+
+  // Validate form fields
+  const nameVal = validatePersonName(rawOwnerName);
+  const phoneValidation = window.SAPhoneUtils ? window.SAPhoneUtils.validateMobile(rawPhone) : { valid: rawPhone.length >= 9, normalized: rawPhone, formatted: rawPhone };
+  const rentValid = !isNaN(rentVal) && rentVal > 0 && rentVal <= 100000;
+  const turnstileValid = !(config && config.turnstileSiteKey) || !!turnstileToken;
+
+  // Log the validation status of the form fields
+  console.log('[handleInitialSubmit] Step 3: Form fields validation status:', {
+    landlordName: { value: rawOwnerName, isValid: nameVal.valid, message: nameVal.message },
+    phoneNumber: { value: rawPhone, isValid: phoneValidation.valid, normalized: phoneValidation.normalized, message: phoneValidation.message },
+    title: { value: titleVal, isValid: titleVal.length >= 3 },
+    suburb: { value: suburbVal, isValid: suburbVal.length >= 2 },
+    address: { value: addressVal, isValid: addressVal.length >= 3 },
+    monthlyRent: { raw: rentRaw, parsed: rentVal, isValid: rentValid },
+    propertyType: { value: typeVal, isValid: !!typeVal },
+    securityTurnstile: { required: !!(config && config.turnstileSiteKey), hasToken: !!turnstileToken, isValid: turnstileValid }
+  });
+
+  // Validation checks with clear UI feedback
+  if (!nameVal.valid) {
+    if (errEl) {
+      errEl.innerText = nameVal.message;
+      errEl.classList.remove('hidden');
+    }
+    const nameErrEl = document.getElementById('ownerNameError');
+    if (nameErrEl) {
+      nameErrEl.innerText = nameVal.message;
+      nameErrEl.classList.remove('hidden');
+    }
+    document.getElementById('ownerName')?.focus();
     return;
   }
+
+  if (!phoneValidation.valid) {
+    if (errEl) {
+      errEl.innerText = phoneValidation.message || 'Please enter a valid 10-digit South African mobile number (e.g. 082 123 4567).';
+      errEl.classList.remove('hidden');
+    }
+    document.getElementById('phoneNumber')?.focus();
+    return;
+  }
+
+  if (!titleVal || titleVal.length < 3) {
+    if (errEl) {
+      errEl.innerText = 'Please enter a listing title (at least 3 characters).';
+      errEl.classList.remove('hidden');
+    }
+    document.getElementById('newTitle')?.focus();
+    return;
+  }
+
+  if (!suburbVal || suburbVal.length < 2) {
+    if (errEl) {
+      errEl.innerText = 'Please enter the suburb (e.g. Dobsonville, Diepkloof).';
+      errEl.classList.remove('hidden');
+    }
+    document.getElementById('newSuburb')?.focus();
+    return;
+  }
+
+  if (!addressVal || addressVal.length < 3) {
+    if (errEl) {
+      errEl.innerText = 'Please enter a street address or landmark.';
+      errEl.classList.remove('hidden');
+    }
+    document.getElementById('newAddress')?.focus();
+    return;
+  }
+
+  if (!rentValid) {
+    if (errEl) {
+      errEl.innerText = 'Please enter a valid monthly rent amount.';
+      errEl.classList.remove('hidden');
+    }
+    document.getElementById('newRent')?.focus();
+    return;
+  }
+
+  if (config && config.turnstileSiteKey && !turnstileToken) {
+    if (errEl) {
+      errEl.innerText = 'Please complete the security verification check.';
+      errEl.classList.remove('hidden');
+    }
+    return;
+  }
+
+  const manualUrlInput = document.getElementById('newImage');
+  const manualUrl = manualUrlInput ? manualUrlInput.value.trim() : '';
+  const finalImage = uploadedPhotoData || (manualUrl.startsWith('http') ? manualUrl : '');
 
   const listingData = {
-    fullName: document.getElementById('ownerName').value.trim(),
-    phone: validation.normalized || rawPhone,
+    fullName: nameVal.normalized || rawOwnerName,
+    phone: phoneValidation.normalized || rawPhone,
     rawPhone: rawPhone,
-    formattedPhone: validation.formatted || rawPhone,
-    title: document.getElementById('newTitle').value.trim(),
-    suburb: document.getElementById('newSuburb').value.trim(),
-    address: document.getElementById('newAddress').value.trim(),
-    monthlyRent: Number(document.getElementById('newRent').value),
-    propertyType: document.getElementById('newType').value,
-    image: uploadedPhotoData || document.getElementById('newImage').value.trim(),
-    nearbyInstitution: document.getElementById('newInstitution').value.trim(),
-    amenities: document.getElementById('newAmenities').value
+    formattedPhone: phoneValidation.formatted || rawPhone,
+    title: titleVal,
+    suburb: suburbVal,
+    address: addressVal,
+    monthlyRent: rentVal,
+    propertyType: typeVal,
+    image: finalImage,
+    nearbyInstitution: document.getElementById('newInstitution') ? document.getElementById('newInstitution').value.trim() : '',
+    amenities: document.getElementById('newAmenities') && document.getElementById('newAmenities').value
       ? document.getElementById('newAmenities').value.split(',').map(a => a.trim()).filter(Boolean)
       : [],
-    hasWhatsapp: document.getElementById('hasWhatsapp').checked,
-    showPhonePublicly: document.getElementById('showPhonePublicly').checked,
-    consentPhonePublic: document.getElementById('consentPhonePublic').checked
+    hasWhatsapp: document.getElementById('hasWhatsapp') ? document.getElementById('hasWhatsapp').checked : true,
+    showPhonePublicly: document.getElementById('showPhonePublicly') ? document.getElementById('showPhonePublicly').checked : true,
+    consentPhonePublic: document.getElementById('consentPhonePublic') ? document.getElementById('consentPhonePublic').checked : true
   };
 
-  const turnstileToken = document.querySelector('[name="cf-turnstile-response"]')?.value;
-  if (config.turnstileSiteKey && !turnstileToken) {
-    errEl.innerText = 'Please complete the security check.';
-    errEl.classList.remove('hidden');
-    return;
-  }
+  console.log('[handleInitialSubmit] Step 4: Prepared listingData payload:', {
+    fullName: listingData.fullName,
+    phone: listingData.phone,
+    title: listingData.title,
+    suburb: listingData.suburb,
+    address: listingData.address,
+    monthlyRent: listingData.monthlyRent,
+    propertyType: listingData.propertyType,
+    hasImage: !!listingData.image,
+    imageType: listingData.image.startsWith('data:') ? 'base64_data_uri' : (listingData.image.startsWith('/images/') ? 'preset' : (listingData.image.startsWith('http') ? 'remote_url' : 'none')),
+    imageLength: listingData.image ? listingData.image.length : 0
+  });
 
   const originalBtnText = submitBtn ? submitBtn.innerText : '🚀 Post Room Listing Now';
   if (submitBtn) {
@@ -2769,43 +3081,101 @@ async function handleInitialSubmit(e) {
     submitBtn.innerText = 'Publishing Room...';
   }
 
+  // Asynchronous flow with explicit try-catch blocks to catch any errors during fetch that might cause promise chain to hang
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => {
+    console.warn('[handleInitialSubmit] Fetch request timed out after 30 seconds. Aborting.');
+    abortController.abort();
+  }, 30000);
+
   try {
     let token = null;
     try { token = localStorage.getItem('landlordToken'); } catch (_) {}
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
-    const res = await fetch('/api/listings/create', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(listingData)
+    console.log('[handleInitialSubmit] Step 5: Dispatching POST /api/listings/create...');
+    const startTime = Date.now();
+
+    let res;
+    try {
+      res = await fetch('/api/listings/create', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(listingData),
+        signal: abortController.signal
+      });
+      clearTimeout(timeoutId);
+    } catch (networkErr) {
+      clearTimeout(timeoutId);
+      console.error('[handleInitialSubmit] Network or fetch error encountered:', networkErr);
+      if (networkErr.name === 'AbortError') {
+        throw new Error('Listing submission timed out. Please check your internet connection or try a smaller photo.');
+      }
+      throw new Error('Unable to connect to server. Please check your internet connection and try again.');
+    }
+
+    const elapsed = Date.now() - startTime;
+    console.log('[handleInitialSubmit] Step 6: Fetch response received in', elapsed, 'ms. Status:', res.status, res.statusText);
+
+    let data;
+    try {
+      data = await res.json();
+    } catch (jsonErr) {
+      console.error('[handleInitialSubmit] Failed to parse JSON response:', jsonErr);
+      throw new Error('Server returned an invalid response. Please try again.');
+    }
+
+    // Log the response from the fetch request
+    console.log('[handleInitialSubmit] Step 7: Response from fetch request:', {
+      status: res.status,
+      ok: res.ok,
+      success: data.success,
+      listingId: data.listing?._id || data.data?._id,
+      publicationStatus: data.listing?.status || data.publicationStatus,
+      error: data.error,
+      errors: data.errors
     });
-    const data = await res.json();
 
     if (!res.ok) {
-      errEl.innerText = data.error || (data.errors && data.errors[0]) || 'Something went wrong publishing your room listing.';
-      errEl.classList.remove('hidden');
+      const errorMsg = data.error || (data.errors && data.errors[0]) || 'Something went wrong publishing your room listing.';
+      console.warn('[handleInitialSubmit] Server rejected listing submission:', errorMsg);
+      if (errEl) {
+        errEl.innerText = errorMsg;
+        errEl.classList.remove('hidden');
+      }
       if (typeof window.turnstile !== 'undefined' && typeof window.turnstile.reset === 'function') {
         try { window.turnstile.reset(); } catch (_) {}
       }
       return;
     }
 
+    console.log('[handleInitialSubmit] Step 8: Listing published successfully! Closing modal and refreshing view.');
     toggleModal('addRoomModal');
     const form = document.getElementById('addRoomForm');
     if (form) form.reset();
     removeUploadedPhoto();
 
-    showToast('🎉 Success! Your room listing has been posted directly. Remember to verify viewings in person!', 'success');
+    const isPending = !data.listing || data.listing.status === 'pending_review' || data.status === 'pending_review' || data.publicationStatus === 'PENDING';
+    if (isPending) {
+      showToast('🎉 Listing submitted! Your room will appear in the public portal as soon as the admin approves it.', 'info');
+    } else {
+      showToast('🎉 Success! Your room listing has been published.', 'success');
+    }
     
     switchTab('listings');
     if (typeof loadListings === 'function') {
       loadListings();
     }
   } catch (err) {
-    errEl.innerText = 'Network error. Please try again.';
-    errEl.classList.remove('hidden');
+    clearTimeout(timeoutId);
+    console.error('[handleInitialSubmit] Error in listing submission flow:', err);
+    if (errEl) {
+      errEl.innerText = err.message || 'An unexpected error occurred. Please try again.';
+      errEl.classList.remove('hidden');
+    }
   } finally {
+    console.log('[handleInitialSubmit] Step 9: Completed submit flow, restoring button state.');
     if (submitBtn) {
       submitBtn.disabled = false;
       submitBtn.innerText = originalBtnText;
@@ -3039,10 +3409,68 @@ async function handleVerifyOtp() {
 // ROOM PHOTO UPLOAD & PREVIEW LOGIC
 // ==========================================
 let uploadedPhotoData = '';
+let isPhotoProcessing = false;
+let photoProcessingPromise = null;
+
+function setPhotoProcessingUI(isProcessing, statusMessage) {
+  const optimizingIndicator = document.getElementById('photoOptimizingIndicator');
+  const uploadPrompt = document.getElementById('uploadPromptContainer');
+  const previewContainer = document.getElementById('imagePreviewContainer');
+  const submitBtn = document.getElementById('btn-submit');
+  const badge = document.getElementById('uploadStatusBadge');
+
+  if (isProcessing) {
+    if (optimizingIndicator) optimizingIndicator.classList.remove('hidden');
+    if (uploadPrompt) uploadPrompt.classList.add('hidden');
+    if (previewContainer) previewContainer.classList.add('hidden');
+    if (badge) {
+      badge.innerText = 'Optimizing Photo...';
+      badge.className = 'text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full';
+      badge.classList.remove('hidden');
+    }
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.dataset.originalText = submitBtn.dataset.originalText || submitBtn.innerText;
+      submitBtn.innerText = '⏳ Optimizing Photo...';
+    }
+  } else {
+    if (optimizingIndicator) optimizingIndicator.classList.add('hidden');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      if (submitBtn.dataset.originalText) {
+        submitBtn.innerText = submitBtn.dataset.originalText;
+      }
+    }
+    if (badge) {
+      if (uploadedPhotoData) {
+        badge.innerText = 'Photo Attached ✓';
+        badge.className = 'text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full';
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+  }
+}
 
 function triggerPhotoSelect() {
   const input = document.getElementById('roomPhotoFileInput');
   if (input) input.click();
+}
+
+function triggerCameraCapture() {
+  const input = document.getElementById('roomPhotoCameraInput');
+  if (input) input.click();
+  else triggerPhotoSelect();
+}
+
+function selectPresetPhoto(url, label) {
+  uploadedPhotoData = url;
+  const newImageInput = document.getElementById('newImage');
+  if (newImageInput) newImageInput.value = url;
+  displayPhotoPreview(url, label);
+  showToast(`Attached sample photo: ${label}`, 'success');
+  console.log('[selectPresetPhoto] Selected sample room photo:', { url, label });
 }
 
 function handleRoomPhotoFileSelected(input) {
@@ -3051,62 +3479,146 @@ function handleRoomPhotoFileSelected(input) {
   }
 }
 
-function processPhotoFile(file) {
-  if (!file) return;
-  if (!file.type.startsWith('image/')) {
-    showToast('Please select an image file (JPG, PNG, WEBP).', 'error');
-    return;
-  }
+// Asynchronous non-blocking canvas resizing and compression
+function resizeAndCompressImage(file) {
+  return new Promise((resolve, reject) => {
+    // Yield to browser event loop first so UI reflects the processing state
+    setTimeout(async () => {
+      let objectUrl = null;
+      try {
+        console.log('[resizeAndCompressImage] Reading image file:', file.name, `(${Math.round(file.size / 1024)} KB, ${file.type})`);
+        objectUrl = URL.createObjectURL(file);
+        const img = new Image();
 
-  if (file.size > 20 * 1024 * 1024) {
-    showToast('Image is larger than 20MB. Please select a smaller photo.', 'error');
-    return;
-  }
+        const loadPromise = new Promise((resLoad, rejLoad) => {
+          img.onload = () => resLoad();
+          img.onerror = () => rejLoad(new Error('Image format could not be decoded.'));
+        });
+        img.src = objectUrl;
 
-  showToast('Optimizing photo...', 'info');
-
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    const img = new Image();
-    img.onload = function() {
-      // Compress and resize on canvas
-      const canvas = document.createElement('canvas');
-      const MAX_W = 1280;
-      const MAX_H = 960;
-      let width = img.width;
-      let height = img.height;
-
-      if (width > height) {
-        if (width > MAX_W) {
-          height = Math.round(height * (MAX_W / width));
-          width = MAX_W;
+        // Modern browsers support decode() off main thread
+        if ('decode' in img) {
+          try {
+            await img.decode();
+          } catch (_) {
+            await loadPromise;
+          }
+        } else {
+          await loadPromise;
         }
-      } else {
-        if (height > MAX_H) {
-          width = Math.round(width * (MAX_H / height));
-          height = MAX_H;
+
+        // Yield again before canvas rasterization
+        await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+
+        const srcWidth = img.naturalWidth || img.width;
+        const srcHeight = img.naturalHeight || img.height;
+
+        if (!srcWidth || !srcHeight) {
+          throw new Error('Could not determine image dimensions.');
+        }
+
+        const MAX_W = 1200;
+        const MAX_H = 900;
+        let width = srcWidth;
+        let height = srcHeight;
+
+        if (width > height) {
+          if (width > MAX_W) {
+            height = Math.round(height * (MAX_W / width));
+            width = MAX_W;
+          }
+        } else {
+          if (height > MAX_H) {
+            width = Math.round(width * (MAX_H / height));
+            height = MAX_H;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d', { alpha: false });
+        if (!ctx) {
+          throw new Error('Canvas 2D context unavailable.');
+        }
+
+        // Solid white background for clean rendering
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Yield before serializing data URL
+        await new Promise(r => setTimeout(r, 0));
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.80);
+
+        // Explicit check to verify the image data URL has been correctly generated
+        if (!dataUrl || typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/jpeg') || dataUrl.length < 200) {
+          throw new Error('Image data URL generation failed or produced invalid content.');
+        }
+
+        console.log('[resizeAndCompressImage] Resized successfully:', {
+          from: `${srcWidth}x${srcHeight}`,
+          to: `${width}x${height}`,
+          dataUrlLength: dataUrl.length,
+          approxKb: Math.round(dataUrl.length / 1024)
+        });
+
+        resolve(dataUrl);
+      } catch (err) {
+        console.error('[resizeAndCompressImage] Compression failed:', err);
+        reject(err);
+      } finally {
+        if (objectUrl) {
+          try { URL.revokeObjectURL(objectUrl); } catch (_) {}
         }
       }
+    }, 20);
+  });
+}
 
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
+async function processPhotoFile(file) {
+  if (!file) return;
+  if (!file.type || !file.type.startsWith('image/')) {
+    showToast('Please select a valid image file (JPG, PNG, WEBP).', 'error');
+    return;
+  }
 
-      uploadedPhotoData = canvas.toDataURL('image/jpeg', 0.85);
-      
-      const newImageInput = document.getElementById('newImage');
-      if (newImageInput) newImageInput.value = uploadedPhotoData;
+  if (file.size > 25 * 1024 * 1024) {
+    showToast('Image is larger than 25MB. Please choose a smaller photo.', 'error');
+    return;
+  }
 
+  console.log('[processPhotoFile] Starting image processing workflow for:', file.name);
+  isPhotoProcessing = true;
+  setPhotoProcessingUI(true, 'Optimizing room picture...');
+  showToast('Optimizing picture for fast listing...', 'info');
+
+  try {
+    photoProcessingPromise = resizeAndCompressImage(file);
+    const verifiedDataUrl = await photoProcessingPromise;
+
+    // Explicit check to verify the image data URL has been correctly generated before updating uploadedPhotoData
+    if (verifiedDataUrl && typeof verifiedDataUrl === 'string' && verifiedDataUrl.startsWith('data:image/') && verifiedDataUrl.length > 200) {
+      uploadedPhotoData = verifiedDataUrl;
+      console.log('[processPhotoFile] uploadedPhotoData successfully verified and assigned. Total characters:', uploadedPhotoData.length);
       displayPhotoPreview(uploadedPhotoData, file.name);
       showToast('Room picture attached successfully! 📸', 'success');
-    };
-    img.onerror = function() {
-      showToast('Could not load image file.', 'error');
-    };
-    img.src = e.target.result;
-  };
-  reader.readAsDataURL(file);
+    } else {
+      throw new Error('Generated data URL failed integrity check.');
+    }
+  } catch (err) {
+    console.error('[processPhotoFile] Failed to process photo:', err);
+    uploadedPhotoData = '';
+    removeUploadedPhoto();
+    showToast('Could not process this picture. Please try another photo or choose a sample room.', 'error');
+  } finally {
+    isPhotoProcessing = false;
+    photoProcessingPromise = null;
+    setPhotoProcessingUI(false);
+  }
 }
 
 function displayPhotoPreview(src, name) {
@@ -3120,16 +3632,26 @@ function displayPhotoPreview(src, name) {
   if (previewContainer) previewContainer.classList.remove('hidden');
   if (previewImg) previewImg.src = src;
   if (fileNameEl) fileNameEl.innerText = name || 'Room Photo';
-  if (badge) badge.classList.remove('hidden');
+  if (badge) {
+    badge.innerText = 'Photo Attached ✓';
+    badge.className = 'text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full';
+    badge.classList.remove('hidden');
+  }
 }
 
 function removeUploadedPhoto() {
   uploadedPhotoData = '';
+  isPhotoProcessing = false;
+  photoProcessingPromise = null;
   const fileInput = document.getElementById('roomPhotoFileInput');
   if (fileInput) fileInput.value = '';
+  const cameraInput = document.getElementById('roomPhotoCameraInput');
+  if (cameraInput) cameraInput.value = '';
   
   const newImageInput = document.getElementById('newImage');
   if (newImageInput) newImageInput.value = '';
+
+  setPhotoProcessingUI(false);
 
   const promptContainer = document.getElementById('uploadPromptContainer');
   const previewContainer = document.getElementById('imagePreviewContainer');
@@ -3140,6 +3662,7 @@ function removeUploadedPhoto() {
   if (previewContainer) previewContainer.classList.add('hidden');
   if (previewImg) previewImg.src = '';
   if (badge) badge.classList.add('hidden');
+  console.log('[removeUploadedPhoto] Photo removed and upload state reset.');
 }
 
 function toggleUrlPhotoInput() {

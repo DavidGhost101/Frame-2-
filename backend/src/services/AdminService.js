@@ -6,6 +6,7 @@ const auditLogRepository = require('../repositories/AuditLogRepository');
 const fallbackStore = require('../../../services/fallbackStore');
 const Landlord = require('../models/Landlord');
 const Listing = require('../models/Listing');
+const appEvents = require('../events/eventEmitter');
 
 class AdminService {
   /**
@@ -20,40 +21,43 @@ class AdminService {
       ]);
 
       const verifiedLandlords = landlords.filter(l => l.isPhoneVerified).length;
-      const paidLandlords = landlords.filter(l => l.isPaidSubscriber).length;
+      const activeLandlords = landlords.filter(l => !l.isBlocked).length;
       const blockedLandlords = landlords.filter(l => l.isBlocked).length;
 
       return {
         listings: listingMetrics,
-        requests: requestMetrics,
+        requests: {
+          total: requestMetrics.total,
+          active: requestMetrics.active
+        },
         landlords: {
           total: landlords.length,
           verified: verifiedLandlords,
-          paid: paidLandlords,
+          active: activeLandlords,
           blocked: blockedLandlords
         }
       };
     } catch (err) {
       console.warn('Dashboard stats fallback:', err.message);
       const fbListings = fallbackStore.fallbackListings || [];
-      const fbRequests = fallbackStore.fallbackRequests || [];
+      const fbRequests = (fallbackStore.fallbackRequests || []).filter(r => !r.isDeleted && r.status !== 'archived');
       const fbLandlords = fallbackStore.fallbackLandlords || [];
       return {
         listings: {
           total: fbListings.length,
-          active: fbListings.filter(l => l.status === 'active').length,
-          pending: fbListings.filter(l => l.status === 'pending_review').length,
+          active: fbListings.filter(l => ['active', 'published', 'approved', 'ACTIVE', 'PUBLISHED', 'APPROVED'].includes(l.status) || l.publicationStatus === 'PUBLISHED').length,
+          pending: fbListings.filter(l => ['pending_review', 'pending', 'PENDING_REVIEW', 'PENDING'].includes(l.status) || l.publicationStatus === 'PENDING').length,
+          suspended: fbListings.filter(l => ['suspended', 'SUSPENDED'].includes(l.status) || l.publicationStatus === 'SUSPENDED').length,
           flagged: fbListings.filter(l => l.flagged).length
         },
         requests: {
           total: fbRequests.length,
-          active: fbRequests.filter(r => r.status === 'active').length,
-          found: fbRequests.filter(r => r.status === 'found').length
+          active: fbRequests.filter(r => r.status === 'active').length
         },
         landlords: {
           total: fbLandlords.length,
           verified: fbLandlords.filter(l => l.isPhoneVerified).length,
-          paid: fbLandlords.filter(l => l.isPaidSubscriber).length,
+          active: fbLandlords.filter(l => !l.isBlocked).length,
           blocked: fbLandlords.filter(l => l.isBlocked).length
         }
       };
@@ -67,7 +71,14 @@ class AdminService {
     try {
       const landlords = await userRepository.findAllLandlords();
       if (!landlords || !landlords.length) {
-        return fallbackStore.fallbackLandlords || [];
+        const fbListings = fallbackStore.fallbackListings || [];
+        return (fallbackStore.fallbackLandlords || []).map(l => ({
+          ...l,
+          listingCount: fbListings.filter(item => {
+            const lId = item.landlordId && (item.landlordId._id || item.landlordId);
+            return String(lId) === String(l._id);
+          }).length
+        }));
       }
       const results = await Promise.all(
         landlords.map(async (l) => {
@@ -81,25 +92,30 @@ class AdminService {
       return results;
     } catch (err) {
       console.warn('GetLandlords fallback:', err.message);
-      return fallbackStore.fallbackLandlords || [];
+      const fbListings = fallbackStore.fallbackListings || [];
+      return (fallbackStore.fallbackLandlords || []).map(l => ({
+        ...l,
+        listingCount: fbListings.filter(item => {
+          const lId = item.landlordId && (item.landlordId._id || item.landlordId);
+          return String(lId) === String(l._id);
+        }).length
+      }));
     }
   }
 
-
   /**
-   * Toggle landlord paid status
+   * Toggle landlord paid status (retained for backward compatibility)
    */
   async setLandlordPaid(landlordId, isPaidSubscriber, adminUser = null) {
-    const landlord = await Landlord.findByIdAndUpdate(landlordId, { isPaidSubscriber: Boolean(isPaidSubscriber) }, { new: true });
-    if (adminUser) {
-      await auditLogRepository.logAction({
-        userId: adminUser.userId,
-        userRole: adminUser.role || 'ADMIN',
-        action: 'UPDATE_LANDLORD_PAID_STATUS',
-        resource: 'Landlord',
-        resourceId: landlordId,
-        newValue: { isPaidSubscriber }
-      });
+    let landlord = null;
+    try {
+      if (mongoose.Types.ObjectId.isValid(landlordId)) {
+        landlord = await Landlord.findByIdAndUpdate(landlordId, { isPaidSubscriber: Boolean(isPaidSubscriber) }, { new: true });
+      }
+    } catch (_) {}
+    if (!landlord && fallbackStore && fallbackStore.fallbackLandlords) {
+      landlord = fallbackStore.fallbackLandlords.find(l => String(l._id) === String(landlordId));
+      if (landlord) landlord.isPaidSubscriber = Boolean(isPaidSubscriber);
     }
     return landlord;
   }
@@ -108,17 +124,81 @@ class AdminService {
    * Toggle landlord block status
    */
   async setLandlordBlocked(landlordId, isBlocked, adminUser = null) {
-    const landlord = await Landlord.findByIdAndUpdate(landlordId, { isBlocked: Boolean(isBlocked) }, { new: true });
+    const isBlockedBool = Boolean(isBlocked);
+    let landlord = null;
+
+    if (mongoose.Types.ObjectId.isValid(landlordId)) {
+      try {
+        landlord = await Landlord.findByIdAndUpdate(
+          landlordId,
+          { isBlocked: isBlockedBool },
+          { new: true }
+        );
+      } catch (err) {
+        console.warn('DB setLandlordBlocked warning:', err.message);
+      }
+    }
+
+    // Always ensure in-memory fallbackStore is kept in sync
+    if (fallbackStore && fallbackStore.fallbackLandlords) {
+      const fbL = fallbackStore.fallbackLandlords.find(
+        l => String(l._id) === String(landlordId)
+      );
+      if (fbL) {
+        fbL.isBlocked = isBlockedBool;
+        if (!landlord) landlord = fbL;
+      }
+    }
+
+    // If landlord has an associated User, sync status
+    if (landlord) {
+      try {
+        if (landlord.userId) {
+          await User.findByIdAndUpdate(landlord.userId, {
+            status: isBlockedBool ? 'suspended' : 'active'
+          });
+        } else if (landlord.phone) {
+          await User.findOneAndUpdate(
+            { phone: landlord.phone },
+            { status: isBlockedBool ? 'suspended' : 'active' }
+          );
+        }
+      } catch (_) {}
+
+      if (fallbackStore && fallbackStore.fallbackUsers) {
+        const fbU = fallbackStore.fallbackUsers.find(
+          u => (landlord.phone && u.phone === landlord.phone) || (landlord.userId && String(u._id) === String(landlord.userId))
+        );
+        if (fbU) {
+          fbU.status = isBlockedBool ? 'suspended' : 'active';
+        }
+      }
+    }
+
+    if (!landlord) {
+      throw new Error(`Landlord with ID ${landlordId} not found.`);
+    }
+
     if (adminUser) {
       await auditLogRepository.logAction({
-        userId: adminUser.userId,
+        userId: adminUser.userId || adminUser._id,
         userRole: adminUser.role || 'ADMIN',
-        action: 'UPDATE_LANDLORD_BLOCK_STATUS',
+        action: isBlockedBool ? 'BLOCK_LANDLORD' : 'UNBLOCK_LANDLORD',
         resource: 'Landlord',
         resourceId: landlordId,
-        newValue: { isBlocked }
+        newValue: { isBlocked: isBlockedBool }
       });
     }
+
+    // Emit real-time event
+    try {
+      appEvents.emit('landlord:updated', {
+        landlord,
+        landlordId: String(landlordId),
+        isBlocked: isBlockedBool
+      });
+    } catch (_) {}
+
     return landlord;
   }
 
@@ -147,8 +227,9 @@ class AdminService {
 
     if (action === 'approve') {
       update = {
-        status: 'PUBLISHED',
+        status: 'active',
         publicationStatus: 'PUBLISHED',
+        isApproved: true,
         approvedBy: adminEmail,
         approvedAt: now,
         publishedAt: now,
@@ -162,8 +243,9 @@ class AdminService {
     } else if (action === 'reject') {
       const reason = options.reason || options.rejectionReason || 'Listing does not satisfy publication standards';
       update = {
-        status: 'REJECTED',
+        status: 'rejected',
         publicationStatus: 'REJECTED',
+        isApproved: false,
         rejectedBy: adminEmail,
         rejectedAt: now,
         rejectionReason: reason,
@@ -172,11 +254,14 @@ class AdminService {
       };
       auditAction = 'LISTING_REJECTED';
     } else if (action === 'suspend') {
+      const reason = options.reason || options.suspensionReason || 'Suspended by admin';
       update = {
-        status: 'SUSPENDED',
+        status: 'suspended',
         publicationStatus: 'SUSPENDED',
+        isApproved: false,
         suspendedBy: adminEmail,
         suspendedAt: now,
+        rejectionReason: reason,
         lastModifiedBy: adminEmail,
         lastModifiedAt: now
       };
@@ -186,6 +271,8 @@ class AdminService {
         status: 'archived',
         isDeleted: true,
         publicationStatus: 'UNPUBLISHED',
+        deletedBy: adminEmail,
+        deletedAt: now,
         lastModifiedBy: adminEmail,
         lastModifiedAt: now
       };
@@ -199,7 +286,18 @@ class AdminService {
     }
 
     let listing = null;
-    if (mongoose.Types.ObjectId.isValid(listingId)) {
+    if (action === 'delete') {
+      try {
+        await Listing.deleteOne({ _id: listingId });
+      } catch (_) {}
+      if (fallbackStore && fallbackStore.fallbackListings) {
+        fallbackStore.fallbackListings = fallbackStore.fallbackListings.filter(l => String(l._id) !== String(listingId));
+      }
+      if (fallbackStore && typeof fallbackStore.deleteListing === 'function') {
+        fallbackStore.deleteListing(listingId);
+      }
+      listing = previousListing ? { ...previousListing, ...update, status: 'deleted', isDeleted: true } : { _id: listingId, status: 'deleted', isDeleted: true };
+    } else if (mongoose.Types.ObjectId.isValid(listingId)) {
       try {
         listing = await Listing.findByIdAndUpdate(listingId, update, { new: true });
       } catch (err) {
@@ -211,18 +309,12 @@ class AdminService {
       } catch (_) {}
     }
 
-    // Also update fallbackStore
-    if (fallbackStore.fallbackListings) {
+    // Also update fallbackStore for non-delete actions
+    if (action !== 'delete' && fallbackStore.fallbackListings) {
       const idx = fallbackStore.fallbackListings.findIndex(l => String(l._id) === String(listingId));
       if (idx !== -1) {
         fallbackStore.fallbackListings[idx] = { ...fallbackStore.fallbackListings[idx], ...update };
         listing = fallbackStore.fallbackListings[idx];
-      }
-    }
-    if (action === 'delete' && typeof fallbackStore.deleteListing === 'function') {
-      const deletedItem = fallbackStore.deleteListing(listingId);
-      if (deletedItem) {
-        listing = deletedItem;
       }
     }
 
@@ -255,6 +347,37 @@ class AdminService {
       result: 'SUCCESS'
     }).catch(() => {});
 
+    // Emit real-time events for admin live subscription
+    try {
+      const payloadListing = listing && (listing.toObject ? listing.toObject() : listing);
+      const finalListing = payloadListing || {
+        _id: String(listingId),
+        ...update,
+        status: update.status || action,
+        title: previousListing ? previousListing.title : 'Listing'
+      };
+
+      if (action === 'approve') {
+        appEvents.emit('listing:approved', finalListing);
+      } else if (action === 'reject') {
+        appEvents.emit('listing:rejected', finalListing);
+      } else if (action === 'suspend') {
+        appEvents.emit('listing:suspended', finalListing);
+      } else if (action === 'delete') {
+        appEvents.emit('listing:deleted', { listingId: String(listingId) });
+      }
+
+      appEvents.emit('listing:status_changed', {
+        listing: finalListing,
+        listingId: String(listingId),
+        action,
+        previousStatus: prevStatus,
+        newStatus: update.status
+      });
+    } catch (evtErr) {
+      console.warn('Error emitting moderateListing event:', evtErr.message);
+    }
+
     return listing || update;
   }
 
@@ -284,7 +407,7 @@ class AdminService {
 
     // If status is being set to approved, published, or active, ensure publicationStatus is PUBLISHED
     if (payload.status === 'APPROVED' || payload.status === 'approved' || payload.status === 'PUBLISHED' || payload.status === 'published' || payload.status === 'active') {
-      payload.status = 'PUBLISHED';
+      payload.status = (payload.status === 'PUBLISHED' || payload.status === 'published') ? 'PUBLISHED' : 'active';
       payload.publicationStatus = 'PUBLISHED';
       payload.approvedBy = payload.approvedBy || adminEmail;
       payload.approvedAt = payload.approvedAt || now;
@@ -355,6 +478,13 @@ class AdminService {
       result: 'SUCCESS'
     }).catch(() => {});
 
+    try {
+      const payloadListing = listing && (listing.toObject ? listing.toObject() : listing);
+      appEvents.emit('listing:updated', payloadListing || { _id: String(listingId), ...payload });
+    } catch (evtErr) {
+      console.warn('Error emitting updateListingWithAudit event:', evtErr.message);
+    }
+
     return listing || payload;
   }
 
@@ -375,8 +505,7 @@ class AdminService {
             hasWhatsapp: true,
             showPhonePublicly: true,
             consentPhonePublic: true,
-            consentTimestamp: new Date(),
-            isPaidSubscriber: true
+            consentTimestamp: new Date()
           });
         }
 
@@ -390,6 +519,8 @@ class AdminService {
           amenities: item.amenities || [],
           image: item.image || '',
           status: 'active',
+          publicationStatus: 'PUBLISHED',
+          isApproved: true,
           source: 'admin_import'
         });
         results.push(listing);
@@ -420,6 +551,8 @@ class AdminService {
           amenities: item.amenities || [],
           image: item.image || '',
           status: 'active',
+          publicationStatus: 'PUBLISHED',
+          isApproved: true,
           source: 'admin_import',
           createdAt: new Date()
         };

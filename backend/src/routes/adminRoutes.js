@@ -16,6 +16,7 @@ const Listing = require('../models/Listing');
 const Landlord = require('../models/Landlord');
 const RoomRequest = require('../models/RoomRequest');
 const User = require('../models/User');
+const appEvents = require('../events/eventEmitter');
 
 // Audit middleware logs all administrative actions to AuditLog collection
 router.use(auditAdminAction);
@@ -43,6 +44,171 @@ router.get('/verify', requireAdmin, (req, res) => {
   });
 });
 
+// Real-Time Server-Sent Events (SSE) Stream for Admin Dashboard
+router.get('/listings/stream', requireAdmin, (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders();
+  }
+
+  const sendSseEvent = (event, data) => {
+    try {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    } catch (_) {}
+  };
+
+  // Immediate connection acknowledgement
+  sendSseEvent('connected', {
+    status: 'connected',
+    message: 'Real-time admin listener connected',
+    timestamp: new Date().toISOString()
+  });
+
+  // Heartbeat to keep connection active and prevent reverse-proxy timeout
+  const heartbeatTimer = setInterval(() => {
+    try {
+      res.write(': keep-alive\n\n');
+    } catch (_) {
+      clearInterval(heartbeatTimer);
+    }
+  }, 20000);
+
+  // App event handlers
+  const handleListingCreated = (listing) => {
+    sendSseEvent('listing:created', {
+      listing,
+      event: 'created',
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  const handleListingApproved = (listing) => {
+    sendSseEvent('listing:approved', {
+      listing,
+      listingId: String(listing._id),
+      status: 'active',
+      event: 'approved',
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  const handleListingRejected = (listing) => {
+    sendSseEvent('listing:rejected', {
+      listing,
+      listingId: String(listing._id),
+      status: 'rejected',
+      event: 'rejected',
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  const handleListingSuspended = (listing) => {
+    sendSseEvent('listing:suspended', {
+      listing,
+      listingId: String(listing._id),
+      status: 'suspended',
+      event: 'suspended',
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  const handleListingDeleted = (payload) => {
+    sendSseEvent('listing:deleted', {
+      listingId: String(payload.listingId || payload.id),
+      event: 'deleted',
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  const handleListingUpdated = (listing) => {
+    sendSseEvent('listing:updated', {
+      listing,
+      listingId: String(listing._id),
+      event: 'updated',
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  const handleStatusChanged = (payload) => {
+    sendSseEvent('listing:status_changed', {
+      ...payload,
+      listingId: String(payload.listingId || (payload.listing && payload.listing._id)),
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  const handleRequestCreated = (request) => {
+    sendSseEvent('request:created', {
+      request,
+      event: 'created',
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  const handleRequestDeleted = (payload) => {
+    sendSseEvent('request:deleted', {
+      requestId: String(payload.requestId || payload.id),
+      event: 'deleted',
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  const handleLandlordUpdated = (payload) => {
+    sendSseEvent('landlord:updated', {
+      landlord: payload.landlord,
+      landlordId: String(payload.landlordId || (payload.landlord && payload.landlord._id)),
+      isBlocked: payload.isBlocked,
+      event: 'updated',
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  const handleUserUpdated = (payload) => {
+    sendSseEvent('user:updated', {
+      user: payload.user,
+      userId: String(payload.userId || (payload.user && payload.user._id)),
+      status: payload.status,
+      role: payload.role,
+      event: 'updated',
+      timestamp: new Date().toISOString()
+    });
+  };
+
+  appEvents.on('listing:created', handleListingCreated);
+  appEvents.on('listing:approved', handleListingApproved);
+  appEvents.on('listing:rejected', handleListingRejected);
+  appEvents.on('listing:suspended', handleListingSuspended);
+  appEvents.on('listing:deleted', handleListingDeleted);
+  appEvents.on('listing:updated', handleListingUpdated);
+  appEvents.on('listing:status_changed', handleStatusChanged);
+  appEvents.on('request:created', handleRequestCreated);
+  appEvents.on('request:deleted', handleRequestDeleted);
+  appEvents.on('landlord:updated', handleLandlordUpdated);
+  appEvents.on('user:updated', handleUserUpdated);
+
+  // Clean up all event listeners and intervals when client disconnects or unmounts
+  req.on('close', () => {
+    clearInterval(heartbeatTimer);
+    appEvents.removeListener('listing:created', handleListingCreated);
+    appEvents.removeListener('listing:approved', handleListingApproved);
+    appEvents.removeListener('listing:rejected', handleListingRejected);
+    appEvents.removeListener('listing:suspended', handleListingSuspended);
+    appEvents.removeListener('listing:deleted', handleListingDeleted);
+    appEvents.removeListener('listing:updated', handleListingUpdated);
+    appEvents.removeListener('listing:status_changed', handleStatusChanged);
+    appEvents.removeListener('request:created', handleRequestCreated);
+    appEvents.removeListener('request:deleted', handleRequestDeleted);
+    appEvents.removeListener('landlord:updated', handleLandlordUpdated);
+    appEvents.removeListener('user:updated', handleUserUpdated);
+  });
+});
+
 // Protect all remaining admin endpoints
 router.use(requireAdmin);
 
@@ -57,14 +223,30 @@ router.get('/listings', async (req, res, next) => {
     const isFlagged = req.query.flagged === 'true';
     const status = req.query.status || 'all';
     const keyword = req.query.keyword || '';
-    const result = await listingService.getListings({ status, keyword, limit: 100 });
+    const sortBy = req.query.sortBy || 'createdAt';
+    const order = req.query.order || 'desc';
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const limit = Math.min(200, Number(req.query.limit) || 100);
+
+    const result = await listingService.getListings({
+      status,
+      keyword,
+      limit,
+      page,
+      sortBy,
+      order
+    });
+
     let listings = result.items || [];
     if (isFlagged) {
       listings = listings.filter(l => l.flagged === true || (l.reportCount && l.reportCount > 0));
     }
     return ApiResponse.success(res, 'Admin listings retrieved', listings, 200, {
       listings,
-      count: listings.length
+      count: listings.length,
+      total: result.total || listings.length,
+      page,
+      limit
     });
   } catch (err) {
     next(err);
@@ -93,15 +275,12 @@ router.put('/listings/:id/reject', adminController.rejectListing);
 
 router.post('/listings/:id/suspend', adminController.suspendListing);
 router.put('/listings/:id/suspend', adminController.suspendListing);
+router.post('/listings/:id/unsuspend', adminController.approveListing);
+router.put('/listings/:id/unsuspend', adminController.approveListing);
 
-router.delete('/listings/:id', async (req, res, next) => {
-  try {
-    const listing = await adminService.moderateListing(req.params.id, 'delete', req.user);
-    return ApiResponse.success(res, 'Listing deleted successfully', listing);
-  } catch (err) {
-    next(err);
-  }
-});
+router.delete('/listings/:id', adminController.deleteListing);
+router.post('/listings/:id/delete', adminController.deleteListing);
+router.delete('/listings/:id/delete', adminController.deleteListing);
 
 
 router.put('/listings/:id/moderate', adminController.moderateListing);
@@ -198,11 +377,34 @@ router.get('/users', async (req, res, next) => {
 router.patch('/users/:id', async (req, res, next) => {
   try {
     const { role, status } = req.body;
-    let updateData = {};
-    if (role !== undefined) updateData.role = role;
-    if (status !== undefined) updateData.status = status;
-    const user = await User.findByIdAndUpdate(req.params.id, updateData, { new: true }).select('-password');
+    let user = null;
+    if (status !== undefined) {
+      user = await userService.updateUserStatus(req.params.id, status, req.user);
+    }
+    if (role !== undefined) {
+      user = await userService.updateUserRole(req.params.id, role, req.user);
+    }
     return ApiResponse.success(res, 'User updated successfully', user, 200, { user });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/users/:id/status', async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    const user = await userService.updateUserStatus(req.params.id, status, req.user);
+    return ApiResponse.success(res, 'User status updated successfully', user, 200, { user });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/users/:id/role', async (req, res, next) => {
+  try {
+    const { role } = req.body;
+    const user = await userService.updateUserRole(req.params.id, role, req.user);
+    return ApiResponse.success(res, 'User role updated successfully', user, 200, { user });
   } catch (err) {
     next(err);
   }
@@ -210,7 +412,14 @@ router.patch('/users/:id', async (req, res, next) => {
 
 router.put('/users/:id', async (req, res, next) => {
   try {
-    const user = await User.findByIdAndUpdate(req.params.id, req.body, { new: true }).select('-password');
+    const { role, status } = req.body;
+    let user = null;
+    if (status !== undefined) {
+      user = await userService.updateUserStatus(req.params.id, status, req.user);
+    }
+    if (role !== undefined) {
+      user = await userService.updateUserRole(req.params.id, role, req.user);
+    }
     return ApiResponse.success(res, 'User updated successfully', user, 200, { user });
   } catch (err) {
     next(err);
@@ -219,8 +428,8 @@ router.put('/users/:id', async (req, res, next) => {
 
 router.delete('/users/:id', async (req, res, next) => {
   try {
-    await User.findByIdAndUpdate(req.params.id, { status: 'suspended', isDeleted: true });
-    return ApiResponse.success(res, 'User suspended successfully');
+    const user = await userService.updateUserStatus(req.params.id, 'suspended', req.user);
+    return ApiResponse.success(res, 'User suspended successfully', user, 200, { user });
   } catch (err) {
     next(err);
   }
@@ -273,8 +482,8 @@ router.put('/room-requests/:id/status', async (req, res, next) => {
 
 router.delete('/room-requests/:id', async (req, res, next) => {
   try {
-    await RoomRequest.findByIdAndUpdate(req.params.id, { isDeleted: true, status: 'archived' });
-    return ApiResponse.success(res, 'Room request removed successfully');
+    const deleted = await roomRequestService.deleteRoomRequest(req.params.id, req.user);
+    return ApiResponse.success(res, 'Room request removed successfully', deleted, 200, { request: deleted });
   } catch (err) {
     next(err);
   }

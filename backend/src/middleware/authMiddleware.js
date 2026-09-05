@@ -83,9 +83,12 @@ function requirePermission(permission) {
   };
 }
 
-// Admin authenticate check (checks cookie or header)
+// Admin authenticate check (checks cookie, header, or query token for SSE)
 function requireAdmin(req, res, next) {
-  const token = (req.cookies && req.cookies.adminSession) || (req.cookies && req.cookies.auth_token);
+  const token =
+    (req.cookies && req.cookies.adminSession) ||
+    (req.cookies && req.cookies.auth_token) ||
+    (req.query && (req.query.token || req.query.adminSession));
   const authHeader = req.headers.authorization;
 
   if (token) {
@@ -105,8 +108,8 @@ function requireAdmin(req, res, next) {
     }
   }
 
-  // Also check admin API key in headers if provided for server-to-server or scripts
-  const providedAdminKey = req.headers['x-admin-key'];
+  // Also check admin API key in headers or query if provided for server-to-server or SSE
+  const providedAdminKey = req.headers['x-admin-key'] || (req.query && (req.query.key || req.query.adminKey));
   if (
     providedAdminKey &&
     (providedAdminKey === config.admin.key ||

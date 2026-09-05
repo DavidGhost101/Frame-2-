@@ -10,6 +10,7 @@ const fallbackLandlords = [
     suburb: 'Dobsonville',
     location: 'Dobsonville, Soweto',
     isPhoneVerified: true,
+    isBlocked: false,
     hasWhatsapp: true,
     showPhonePublicly: true,
     consentPhonePublic: true,
@@ -27,6 +28,7 @@ const fallbackLandlords = [
     suburb: 'Pimville',
     location: 'Pimville, Soweto',
     isPhoneVerified: true,
+    isBlocked: false,
     hasWhatsapp: true,
     showPhonePublicly: true,
     consentPhonePublic: true,
@@ -44,6 +46,7 @@ const fallbackLandlords = [
     suburb: 'Diepkloof',
     location: 'Diepkloof Zone 3, Soweto',
     isPhoneVerified: true,
+    isBlocked: false,
     hasWhatsapp: true,
     showPhonePublicly: true,
     consentPhonePublic: true,
@@ -61,6 +64,7 @@ const fallbackLandlords = [
     suburb: 'Meadowlands',
     location: 'Meadowlands Zone 2, Soweto',
     isPhoneVerified: true,
+    isBlocked: false,
     hasWhatsapp: true,
     showPhonePublicly: true,
     consentPhonePublic: true,
@@ -78,6 +82,7 @@ const fallbackLandlords = [
     suburb: 'Protea Glen',
     location: 'Protea Glen Ext 4, Soweto',
     isPhoneVerified: false,
+    isBlocked: false,
     hasWhatsapp: true,
     showPhonePublicly: true,
     consentPhonePublic: true,
@@ -86,6 +91,64 @@ const fallbackLandlords = [
     trialEndsAt: new Date(Date.now() + 15 * 24 * 3600 * 1000),
     isWithinFreeAccess: () => true,
     createdAt: new Date('2026-02-18')
+  }
+];
+
+const fallbackUsers = [
+  {
+    _id: 'user_001',
+    fullName: 'Soweto Platform Super Admin',
+    email: 'admin@rentaroomsoweto.co.za',
+    phone: '+27820000001',
+    role: 'SUPER_ADMIN',
+    status: 'active',
+    isEmailVerified: true,
+    isPhoneVerified: true,
+    createdAt: new Date('2026-01-01')
+  },
+  {
+    _id: 'user_002',
+    fullName: 'Sipho Ndlovu',
+    email: 'sipho.ndlovu@rentaroom.co.za',
+    phone: '+27821234567',
+    role: 'LANDLORD',
+    status: 'active',
+    isEmailVerified: true,
+    isPhoneVerified: true,
+    createdAt: new Date('2026-01-15')
+  },
+  {
+    _id: 'user_003',
+    fullName: 'Thabo Molefe',
+    email: 'thabo.molefe@gmail.com',
+    phone: '+27839876543',
+    role: 'LANDLORD',
+    status: 'active',
+    isEmailVerified: true,
+    isPhoneVerified: true,
+    createdAt: new Date('2026-01-20')
+  },
+  {
+    _id: 'user_004',
+    fullName: 'Nomsa Zulu',
+    email: 'nomsa.zulu@gmail.com',
+    phone: '+27845551234',
+    role: 'LANDLORD',
+    status: 'active',
+    isEmailVerified: true,
+    isPhoneVerified: true,
+    createdAt: new Date('2026-02-01')
+  },
+  {
+    _id: 'user_005',
+    fullName: 'Lerato Mthembu',
+    email: 'lerato.mthembu@gmail.com',
+    phone: '+27825556677',
+    role: 'USER',
+    status: 'active',
+    isEmailVerified: true,
+    isPhoneVerified: true,
+    createdAt: new Date('2026-02-10')
   }
 ];
 
@@ -99,7 +162,7 @@ const fallbackListings = [
     monthlyRent: 2200,
     propertyType: 'Ensuite',
     amenities: ['Free WiFi', 'Prepaid Power', 'Private Shower', 'Secured Yard', 'Near Rea Vaya'],
-    image: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=80',
+    image: '/images/township_ensuite.jpg',
     status: 'active',
     source: 'landlord',
     contactCount: 14,
@@ -117,7 +180,7 @@ const fallbackListings = [
     monthlyRent: 1800,
     propertyType: 'Garage',
     amenities: ['Prepaid Electricity', 'Parking Space', 'Hot Water', 'Tiled Floors'],
-    image: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=800&q=80',
+    image: '/images/converted_garage.jpg',
     status: 'active',
     source: 'landlord',
     contactCount: 8,
@@ -136,7 +199,7 @@ const fallbackListings = [
     propertyType: 'Student Accommodation',
     nearbyInstitution: 'University of Johannesburg, Soweto Campus',
     amenities: ['Uncapped WiFi', 'Study Desk', 'Prepaid Meter', 'Near UJ Campus', 'CCTV Security'],
-    image: 'https://images.unsplash.com/photo-1598928506311-c55ded91a20c?auto=format&fit=crop&w=800&q=80',
+    image: '/images/student_room.jpg',
     status: 'active',
     source: 'landlord',
     contactCount: 22,
@@ -154,7 +217,7 @@ const fallbackListings = [
     monthlyRent: 2800,
     propertyType: 'Apartment',
     amenities: ['Full Bathroom', 'Fitted Kitchenette', 'Gated Yard', 'Prepaid Power', 'Near Diepkloof Square'],
-    image: 'https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=800&q=80',
+    image: '/images/township_backroom.jpg',
     status: 'active',
     source: 'landlord',
     contactCount: 19,
@@ -172,7 +235,7 @@ const fallbackListings = [
     monthlyRent: 1500,
     propertyType: 'Backroom',
     amenities: ['Shared Bathroom', 'Prepaid Electricity', 'Near Protea Glen Mall', 'Safe Fenced Yard'],
-    image: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&w=800&q=80',
+    image: '/images/township_backroom.jpg',
     status: 'active',
     source: 'landlord',
     contactCount: 5,
@@ -190,7 +253,7 @@ const fallbackListings = [
     monthlyRent: 2100,
     propertyType: 'Flatlet',
     amenities: ['Private Shower & Toilet', 'Free WiFi', 'Paved Yard', 'Motorized Gate', 'Covered Parking'],
-    image: 'https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=800&q=80',
+    image: '/images/converted_garage.jpg',
     status: 'active',
     publicationStatus: 'PUBLISHED',
     approvedBy: '12rakosadavid@gmail.com',
@@ -204,7 +267,7 @@ const fallbackListings = [
     createdAt: new Date(Date.now() - 6 * 24 * 3600 * 1000)
   },
   {
-    _id: 'listing_006',
+    _id: 'listing_007',
     landlordId: 'landlord_003',
     title: 'Brand New Self-Contained Bachelor Room with Prepaid Meter',
     suburb: 'Meadowlands',
@@ -212,7 +275,7 @@ const fallbackListings = [
     monthlyRent: 2300,
     propertyType: 'Backroom',
     amenities: ['Prepaid Meter', 'Private Shower', 'Secured Burglar Bars', 'Paved Yard'],
-    image: 'https://images.unsplash.com/photo-1595526114035-0d45ed16cfbf?auto=format&fit=crop&w=800&q=80',
+    image: '/images/township_backroom.jpg',
     status: 'pending_review',
     publicationStatus: 'PENDING',
     source: 'landlord',
@@ -323,16 +386,18 @@ function addLandlord(data) {
 }
 
 function addListing(data) {
+  const serverTime = (data && data.createdAt) ? new Date(data.createdAt) : new Date();
   const newListing = {
-    _id: 'listing_' + Date.now(),
-    status: 'pending_review',
+    _id: (data && data._id) ? data._id : ('listing_' + Date.now()),
+    status: (data && data.status) ? data.status : 'pending_review',
+    publicationStatus: (data && data.publicationStatus) ? data.publicationStatus : ((data && data.status === 'active') ? 'PUBLISHED' : 'PENDING'),
     contactCount: 0,
-    source: 'landlord',
-    flagged: false,
-    flagReasons: [],
+    source: (data && data.source) ? data.source : 'landlord',
+    flagged: !!(data && data.flagged),
+    flagReasons: (data && data.flagReasons) || [],
     reportCount: 0,
-    createdAt: new Date(),
-    ...data
+    ...data,
+    createdAt: serverTime
   };
   fallbackListings.unshift(newListing);
   return newListing;
@@ -511,6 +576,32 @@ function deleteListing(id) {
   return null;
 }
 
+function deleteRequest(id) {
+  const idx = fallbackRequests.findIndex(r => String(r._id) === String(id));
+  if (idx !== -1) {
+    const item = fallbackRequests[idx];
+    item.isDeleted = true;
+    item.status = 'archived';
+    // Remove from active array so it will never be returned in queries
+    fallbackRequests.splice(idx, 1);
+    return item;
+  }
+  return null;
+}
+
+function getUserById(id) {
+  return fallbackUsers.find(u => String(u._id) === String(id));
+}
+
+function updateUser(id, updateData) {
+  const user = fallbackUsers.find(u => String(u._id) === String(id));
+  if (user) {
+    Object.assign(user, updateData);
+    return user;
+  }
+  return null;
+}
+
 function getAllMessages(limit = 100) {
   return [...fallbackMessages]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -519,6 +610,7 @@ function getAllMessages(limit = 100) {
 
 module.exports = {
   fallbackLandlords,
+  fallbackUsers,
   fallbackListings,
   fallbackRequests,
   fallbackAuditLogs,
@@ -529,6 +621,9 @@ module.exports = {
   deleteListing,
   reportListing,
   addRequest,
+  deleteRequest,
+  getUserById,
+  updateUser,
   addAuditLog,
   fallbackMessages,
   addMessage,

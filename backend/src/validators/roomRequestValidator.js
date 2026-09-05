@@ -3,8 +3,13 @@ const { validateSouthAfricanMobile } = require('../utils/phoneUtils');
 class RoomRequestValidator {
   static validateCreate(data) {
     const errors = [];
-    if (!data.seekerName || typeof data.seekerName !== 'string' || data.seekerName.trim().length < 2) {
+    const name = (data.seekerName || data.name || '').trim();
+    if (!name || name.length < 2) {
       errors.push('Your name is required.');
+    } else if (/\d/.test(name)) {
+      errors.push('Please enter a valid name using letters only.');
+    } else if (!/^[a-zA-Z\u00C0-\u024F\s.'-]+$/.test(name) || name.replace(/[^a-zA-Z]/g, '').length < 2) {
+      errors.push('Please enter a valid name using letters only.');
     }
     const phoneVal = validateSouthAfricanMobile(data.phone);
     if (!phoneVal.valid) {

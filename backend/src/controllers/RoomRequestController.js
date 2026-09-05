@@ -25,7 +25,7 @@ class RoomRequestController {
     try {
       const validation = RoomRequestValidator.validateCreate(req.body);
       if (!validation.isValid) {
-        return ApiResponse.error(res, 'Validation error', 400, validation.errors);
+        return ApiResponse.error(res, validation.errors[0] || 'Validation error', 400, validation.errors);
       }
 
       const request = await roomRequestService.createRoomRequest(req.body);
@@ -43,6 +43,17 @@ class RoomRequestController {
       const updated = await roomRequestService.updateStatus(req.params.id, status);
       return ApiResponse.success(res, 'Room request status updated.', updated, 200, {
         request: updated
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async deleteRoomRequest(req, res, next) {
+    try {
+      const deleted = await roomRequestService.deleteRoomRequest(req.params.id, req.user);
+      return ApiResponse.success(res, 'Room request deleted successfully.', deleted, 200, {
+        request: deleted
       });
     } catch (err) {
       next(err);

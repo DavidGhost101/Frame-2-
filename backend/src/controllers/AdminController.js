@@ -86,9 +86,23 @@ class AdminController {
 
   async suspendListing(req, res, next) {
     try {
-      const listing = await adminService.moderateListing(req.params.id, 'suspend', req.user);
+      const reason = req.body && (req.body.reason || req.body.suspensionReason);
+      const listing = await adminService.moderateListing(req.params.id, 'suspend', req.user, { reason });
       return ApiResponse.success(res, 'Listing suspended successfully.', listing, 200, {
         listing
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async deleteListing(req, res, next) {
+    try {
+      const listing = await adminService.moderateListing(req.params.id, 'delete', req.user);
+      return ApiResponse.success(res, 'Listing permanently deleted.', listing, 200, {
+        listing,
+        deleted: true,
+        id: req.params.id
       });
     } catch (err) {
       next(err);

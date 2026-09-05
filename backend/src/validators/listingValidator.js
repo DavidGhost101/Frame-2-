@@ -1,6 +1,15 @@
 class ListingValidator {
   static validateCreate(data) {
     const errors = [];
+    const name = (data.fullName || data.ownerName || data.landlordFullName || data.landlordName || '').trim();
+    if (!name) {
+      errors.push('Landlord name is required.');
+    } else if (/\d/.test(name)) {
+      errors.push('Please enter a valid name using letters only.');
+    } else if (!/^[a-zA-Z\u00C0-\u024F\s.'-]+$/.test(name) || name.replace(/[^a-zA-Z]/g, '').length < 2) {
+      errors.push('Please enter a valid name using letters only.');
+    }
+
     if (!data.title || typeof data.title !== 'string' || data.title.trim().length < 3) {
       errors.push('Listing title must be at least 3 characters.');
     }

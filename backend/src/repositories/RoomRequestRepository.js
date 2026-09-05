@@ -34,13 +34,11 @@ class RoomRequestRepository extends BaseRepository {
   }
 
   async getMetrics() {
-
-    const [total, active, found] = await Promise.all([
+    const [total, active] = await Promise.all([
       this.model.countDocuments({ isDeleted: { $ne: true } }),
-      this.model.countDocuments({ isDeleted: { $ne: true }, status: 'active' }),
-      this.model.countDocuments({ isDeleted: { $ne: true }, status: 'found' })
+      this.model.countDocuments({ isDeleted: { $ne: true }, status: 'active' })
     ]);
-    return { total, active, found };
+    return { total, active };
   }
 }
 

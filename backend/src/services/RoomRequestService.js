@@ -1,5 +1,17 @@
 const roomRequestRepository = require('../repositories/RoomRequestRepository');
 const fallbackStore = require('../../../services/fallbackStore');
+const mongoose = require('mongoose');
+const appEvents = require('../events/eventEmitter');
+
+// Duplicate submission window cache (prevents duplicate room requests within 30 seconds)
+const recentRequestSubmissions = new Map();
+
+setInterval(() => {
+  const cutoff = Date.now() - 60000;
+  for (const [key, val] of recentRequestSubmissions.entries()) {
+    if (val.timestamp < cutoff) recentRequestSubmissions.delete(key);
+  }
+}, 60000);
 
 class RoomRequestService {
   /**
@@ -57,20 +69,36 @@ class RoomRequestService {
       const { items, total } = await roomRequestRepository.findPaginated(filter, pagination);
 
       if (total === 0 && fallbackStore && fallbackStore.fallbackRequests) {
+        let fbItems = fallbackStore.fallbackRequests.filter(r => !r.isDeleted && r.status !== 'archived');
+        if (status && status !== 'all') {
+          fbItems = fbItems.filter(r => r.status === status);
+        }
+        if (suburb && suburb !== 'all') {
+          fbItems = fbItems.filter(r => (r.suburb || '').toLowerCase() === suburb.toLowerCase());
+        }
+        if (keyword) {
+          const kw = keyword.toLowerCase();
+          fbItems = fbItems.filter(r =>
+            (r.seekerName && r.seekerName.toLowerCase().includes(kw)) ||
+            (r.suburb && r.suburb.toLowerCase().includes(kw)) ||
+            (r.notes && r.notes.toLowerCase().includes(kw))
+          );
+        }
         return {
-          items: fallbackStore.fallbackRequests,
-          total: fallbackStore.fallbackRequests.length,
-          page: 1,
-          limit: 20
+          items: fbItems.slice(skip, skip + Number(limit)),
+          total: fbItems.length,
+          page: Number(page),
+          limit: Number(limit)
         };
       }
 
       return { items, total, page: Number(page), limit: Number(limit) };
     } catch (err) {
       console.warn('RoomRequestService query fallback:', err.message);
+      let fbItems = (fallbackStore.fallbackRequests || []).filter(r => !r.isDeleted && r.status !== 'archived');
       return {
-        items: fallbackStore.fallbackRequests || [],
-        total: (fallbackStore.fallbackRequests || []).length,
+        items: fbItems,
+        total: fbItems.length,
         page: 1,
         limit: 20
       };
@@ -82,6 +110,40 @@ class RoomRequestService {
    */
   async createRoomRequest(data) {
     const formattedPhone = data.phone.startsWith('+') ? data.phone : (data.phone.startsWith('0') ? '+27' + data.phone.substring(1) : '+27' + data.phone);
+
+    // Duplicate check
+    const naturalKey = `${formattedPhone.replace(/\D/g, '')}:${(data.suburb || '').toLowerCase().trim()}:${(data.roomType || '').toLowerCase().trim()}:${Number(data.maxBudget)}`;
+    const now = Date.now();
+    const lastSub = recentRequestSubmissions.get(naturalKey);
+    if (lastSub && (now - lastSub.timestamp < 30000)) {
+      const err = new Error('A room request with these details was recently submitted. Please avoid submitting duplicates.');
+      err.statusCode = 409;
+      err.code = 'DUPLICATE_SUBMISSION';
+      throw err;
+    }
+    recentRequestSubmissions.set(naturalKey, { timestamp: now });
+
+    const isDbConnected = mongoose.connection && mongoose.connection.readyState === 1;
+    if (!isDbConnected && fallbackStore && fallbackStore.addRequest) {
+      const fbReq = fallbackStore.addRequest({
+        seekerName: data.seekerName.trim(),
+        phone: formattedPhone,
+        hasWhatsapp: data.hasWhatsapp !== undefined ? Boolean(data.hasWhatsapp) : true,
+        suburb: data.suburb.trim(),
+        maxBudget: Number(data.maxBudget),
+        roomType: data.roomType || 'Any',
+        occupation: data.occupation || 'Single Person',
+        moveInDate: data.moveInDate || 'Immediate',
+        notes: (data.notes || '').trim(),
+        amenitiesWanted: Array.isArray(data.amenitiesWanted) ? data.amenitiesWanted : [],
+        status: 'active',
+        isVerified: true
+      });
+      try {
+        appEvents.emit('request:created', fbReq);
+      } catch (_) {}
+      return fbReq;
+    }
 
     try {
       const request = await roomRequestRepository.create({
@@ -98,6 +160,10 @@ class RoomRequestService {
         status: 'active',
         isVerified: true
       });
+
+      try {
+        appEvents.emit('request:created', request);
+      } catch (_) {}
 
       return request;
     } catch (err) {
@@ -117,6 +183,9 @@ class RoomRequestService {
           status: 'active',
           isVerified: true
         });
+        try {
+          appEvents.emit('request:created', fbReq);
+        } catch (_) {}
         return fbReq;
       }
       throw err;
@@ -138,7 +207,7 @@ class RoomRequestService {
   }
 
   /**
-   * Mark request as found or archived
+   * Update request status (active, archived, etc.)
    */
   async updateStatus(id, status) {
     try {
@@ -153,6 +222,41 @@ class RoomRequestService {
       }
     }
     return null;
+  }
+
+  /**
+   * Delete room request
+   */
+  async deleteRoomRequest(id, adminUser = null) {
+    let deleted = null;
+    try {
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        deleted = await roomRequestRepository.updateById(id, {
+          isDeleted: true,
+          status: 'archived',
+          deletedAt: new Date()
+        });
+      }
+    } catch (err) {
+      console.warn('DB deleteRoomRequest warning:', err.message);
+    }
+
+    if (fallbackStore && typeof fallbackStore.deleteRequest === 'function') {
+      const fbDeleted = fallbackStore.deleteRequest(id);
+      if (!deleted && fbDeleted) {
+        deleted = fbDeleted;
+      }
+    }
+
+    // Emit real-time event
+    try {
+      appEvents.emit('request:deleted', {
+        requestId: String(id),
+        timestamp: new Date().toISOString()
+      });
+    } catch (_) {}
+
+    return deleted || { _id: id, isDeleted: true };
   }
 
   /**

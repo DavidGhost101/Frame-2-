@@ -124,6 +124,10 @@
       </div>
     </div>
     <div class="flex items-center gap-3 self-end sm:self-auto">
+      <div id="realtimeStatusBadge" class="text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 flex items-center gap-1.5 transition">
+        <span id="realtimeStatusDot" class="w-2 h-2 rounded-full bg-slate-500"></span>
+        <span id="realtimeStatusText">Connecting live stream...</span>
+      </div>
       <a href="/" class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition flex items-center gap-1.5">
         <span>🌐</span>
         <span>Public Portal</span>
@@ -181,39 +185,82 @@
   <!-- PANEL 1: Listings Management -->
   <section id="listingsPanel" class="space-y-4">
     <!-- Controls bar -->
-    <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between bg-slate-800/60 border border-slate-700/60 p-3 rounded-2xl">
-      <div class="flex flex-wrap gap-2 items-center flex-1">
-        <input 
-          type="text" 
-          id="listingSearchInput" 
-          oninput="debounceSearchListings()" 
-          placeholder="Search by title, suburb, or landlord..." 
-          class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-rose-500 flex-1 min-w-[200px]"
-        />
-        <select id="statusFilter" onchange="loadListings()" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-rose-500">
-          <option value="all">All statuses</option>
-          <option value="pending_review">Pending Review</option>
-          <option value="active">Active</option>
-          <option value="rejected">Rejected</option>
-          <option value="archived">Archived</option>
-        </select>
-        <button 
-          onclick="toggleFlaggedOnly()" 
-          id="flaggedToggleBtn" 
-          class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:border-red-500 transition cursor-pointer flex items-center gap-1.5"
-        >
-          <span>🚩</span>
-          <span>Flagged Only</span>
+    <div class="bg-slate-800/60 border border-slate-700/60 p-3 sm:p-4 rounded-2xl space-y-3">
+      <!-- Interactive Status Filter Tabs / Pills -->
+      <div class="flex flex-wrap items-center gap-1.5 pb-2 border-b border-slate-700/60 text-xs">
+        <span class="text-slate-400 font-bold text-[11px] uppercase tracking-wider mr-1">Filter:</span>
+        <button type="button" onclick="filterByStatus('all')" id="statusPill-all" class="status-pill px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer bg-rose-500 text-white shadow-sm flex items-center gap-1.5">
+          <span>All</span>
+          <span id="pillCount-all" class="text-[10px] px-1.5 py-0.2 rounded-full bg-black/25">0</span>
+        </button>
+        <button type="button" onclick="filterByStatus('active')" id="statusPill-active" class="status-pill px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700 flex items-center gap-1.5">
+          <span>🌐 Active</span>
+          <span id="pillCount-active" class="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-800/40">0</span>
+        </button>
+        <button type="button" onclick="filterByStatus('pending_review')" id="statusPill-pending_review" class="status-pill px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700 flex items-center gap-1.5">
+          <span>⏳ Pending Review</span>
+          <span id="pillCount-pending_review" class="text-[10px] px-1.5 py-0.2 rounded-full bg-amber-950/80 text-amber-300 border border-amber-800/40">0</span>
+        </button>
+        <button type="button" onclick="filterByStatus('flagged')" id="statusPill-flagged" class="status-pill px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700 flex items-center gap-1.5">
+          <span>🚩 Flagged</span>
+          <span id="pillCount-flagged" class="text-[10px] px-1.5 py-0.2 rounded-full bg-red-950/80 text-red-300 border border-red-800/40">0</span>
+        </button>
+        <button type="button" onclick="filterByStatus('suspended')" id="statusPill-suspended" class="status-pill px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700 flex items-center gap-1.5">
+          <span>🚫 Suspended</span>
+          <span id="pillCount-suspended" class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-700 text-slate-300">0</span>
+        </button>
+        <button type="button" onclick="filterByStatus('rejected')" id="statusPill-rejected" class="status-pill px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700 flex items-center gap-1.5">
+          <span>❌ Rejected</span>
+          <span id="pillCount-rejected" class="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-700 text-slate-300">0</span>
         </button>
       </div>
-      <div class="flex items-center gap-2">
-        <button 
-          onclick="toggleModal('importModal')" 
-          class="text-xs font-bold px-3.5 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-rose-500/10"
-        >
-          <span>+</span>
-          <span>Bulk Import</span>
-        </button>
+
+      <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+        <div class="flex flex-wrap gap-2 items-center flex-1">
+          <input 
+            type="text" 
+            id="listingSearchInput" 
+            oninput="debounceSearchListings()" 
+            placeholder="Search by title, suburb, or landlord..." 
+            class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-rose-500 flex-1 min-w-[200px]"
+          />
+          <select id="statusFilter" onchange="filterByStatus(this.value)" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-rose-500">
+            <option value="all">All statuses</option>
+            <option value="active">Active only</option>
+            <option value="pending_review">Pending Review only</option>
+            <option value="flagged">Flagged only</option>
+            <option value="suspended">Suspended only</option>
+            <option value="rejected">Rejected only</option>
+            <option value="archived">Archived only</option>
+          </select>
+          <button 
+            onclick="toggleFlaggedOnly()" 
+            id="flaggedToggleBtn" 
+            class="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:border-red-500 transition cursor-pointer flex items-center gap-1.5"
+          >
+            <span>🚩</span>
+            <span>Flagged Only</span>
+          </button>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button 
+            type="button"
+            onclick="openDeleteByIdModal()" 
+            class="text-xs font-bold px-3 py-2 rounded-xl bg-red-950/70 hover:bg-red-900/90 text-red-300 border border-red-800/50 transition flex items-center gap-1.5 cursor-pointer"
+            title="Delete old or flagged listing by ID"
+          >
+            <span>🗑️</span>
+            <span>Delete by ID</span>
+          </button>
+          <button 
+            type="button"
+            onclick="toggleModal('importModal')" 
+            class="text-xs font-bold px-3.5 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-rose-500/10"
+          >
+            <span>+</span>
+            <span>Bulk Import</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -521,6 +568,105 @@
   </div>
 </div>
 
+<!-- Modal: Suspend Listing Reason -->
+<div id="suspendModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50" onclick="handleModalBackdrop(event, 'suspendModal')">
+  <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full relative shadow-2xl" onclick="event.stopPropagation()">
+    <div class="flex justify-between items-center mb-3 pb-3 border-b border-slate-700">
+      <div class="flex items-center gap-2">
+        <span class="text-amber-400 text-lg">🚫</span>
+        <h3 class="text-base font-bold text-white">Suspend Room Listing</h3>
+      </div>
+      <button type="button" onclick="toggleModal('suspendModal')" class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white flex items-center justify-center font-bold text-sm transition cursor-pointer">✕</button>
+    </div>
+    
+    <p class="text-xs text-slate-300 mb-3 leading-relaxed">
+      Suspended listings are immediately hidden from the public portal and cannot be viewed by tenants. Provide a reason for suspending <strong id="suspendModalTitle" class="text-white">this listing</strong>.
+    </p>
+
+    <div class="space-y-1.5 mb-3">
+      <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400">Quick Reason Presets</label>
+      <div class="flex flex-wrap gap-1.5 text-xs">
+        <button type="button" onclick="setSuspendReasonPreset('Policy violation / Terms breach')" class="px-2.5 py-1 rounded-lg bg-slate-700/80 hover:bg-slate-700 text-slate-300 text-[11px] transition cursor-pointer">⚖️ Terms breach</button>
+        <button type="button" onclick="setSuspendReasonPreset('Pending landlord address re-verification')" class="px-2.5 py-1 rounded-lg bg-slate-700/80 hover:bg-slate-700 text-slate-300 text-[11px] transition cursor-pointer">📍 Address verification</button>
+        <button type="button" onclick="setSuspendReasonPreset('Tenant complaints / Unsafe conditions reported')" class="px-2.5 py-1 rounded-lg bg-slate-700/80 hover:bg-slate-700 text-slate-300 text-[11px] transition cursor-pointer">⚠️ Tenant complaints</button>
+        <button type="button" onclick="setSuspendReasonPreset('Suspected duplicate or scam listing')" class="px-2.5 py-1 rounded-lg bg-slate-700/80 hover:bg-slate-700 text-slate-300 text-[11px] transition cursor-pointer">🛡️ Suspected scam</button>
+      </div>
+    </div>
+
+    <form onsubmit="submitSuspendListing(event)" class="space-y-3">
+      <input type="hidden" id="suspendListingId" />
+      <div>
+        <label for="suspendReasonInput" class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Suspension Reason</label>
+        <textarea id="suspendReasonInput" rows="3" required placeholder="Specify why this listing is being suspended..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white outline-none focus:border-amber-500"></textarea>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-3 border-t border-slate-700/60">
+        <button type="button" onclick="toggleModal('suspendModal')" class="px-4 py-2 font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs transition cursor-pointer">Cancel</button>
+        <button type="submit" id="suspendSubmitBtn" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 font-semibold text-white rounded-xl text-xs transition cursor-pointer shadow-md shadow-amber-600/20">Confirm Suspension</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: Delete Listing Confirmation -->
+<div id="deleteConfirmModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50" onclick="handleModalBackdrop(event, 'deleteConfirmModal')">
+  <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full relative shadow-2xl" onclick="event.stopPropagation()">
+    <div class="flex justify-between items-center mb-3 pb-3 border-b border-slate-700">
+      <div class="flex items-center gap-2">
+        <span class="text-red-500 text-lg">🗑️</span>
+        <h3 class="text-base font-bold text-white">Delete Listing Permanently</h3>
+      </div>
+      <button type="button" onclick="toggleModal('deleteConfirmModal')" class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white flex items-center justify-center font-bold text-sm transition cursor-pointer">✕</button>
+    </div>
+    
+    <p class="text-xs text-slate-300 mb-4 leading-relaxed">
+      Are you sure you want to permanently delete <strong id="deleteConfirmModalTitle" class="text-white">this listing</strong>? This action is irreversible and will remove the room from both active databases and the public catalog.
+    </p>
+
+    <input type="hidden" id="deleteTargetListingId" />
+
+    <div class="flex justify-end gap-2 pt-3 border-t border-slate-700/60">
+      <button type="button" onclick="toggleModal('deleteConfirmModal')" class="px-4 py-2 font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs transition cursor-pointer">Cancel</button>
+      <button type="button" id="confirmDeleteBtn" onclick="confirmDeleteListingAction()" class="px-4 py-2 bg-red-600 hover:bg-red-500 font-semibold text-white rounded-xl text-xs transition cursor-pointer shadow-md shadow-red-600/20">Delete Listing</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Delete Old or Flagged Listing by ID -->
+<div id="deleteByIdModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50" onclick="handleModalBackdrop(event, 'deleteByIdModal')">
+  <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-md w-full relative shadow-2xl" onclick="event.stopPropagation()">
+    <div class="flex justify-between items-center mb-3 pb-3 border-b border-slate-700">
+      <div class="flex items-center gap-2">
+        <span class="text-red-500 text-lg">🗑️</span>
+        <h3 class="text-base font-bold text-white">Delete Listing by ID</h3>
+      </div>
+      <button type="button" onclick="toggleModal('deleteByIdModal')" class="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-300 hover:text-white flex items-center justify-center font-bold text-sm transition cursor-pointer">✕</button>
+    </div>
+    
+    <p class="text-xs text-slate-300 mb-4 leading-relaxed">
+      Permanently delete any old, duplicate, or flagged room listing by specifying its ID. Once deleted, the dashboard will immediately refresh.
+    </p>
+
+    <form onsubmit="submitDeleteListingById(event)" class="space-y-3">
+      <div>
+        <label for="deleteByIdInput" class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1">Listing ID</label>
+        <input 
+          type="text" 
+          id="deleteByIdInput" 
+          required 
+          placeholder="e.g. listing_001 or MongoDB ID..." 
+          class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2.5 text-xs text-white font-mono outline-none focus:border-red-500"
+        />
+      </div>
+
+      <div class="flex justify-end gap-2 pt-3 border-t border-slate-700/60">
+        <button type="button" onclick="toggleModal('deleteByIdModal')" class="px-4 py-2 font-semibold bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl text-xs transition cursor-pointer">Cancel</button>
+        <button type="submit" id="deleteByIdSubmitBtn" class="px-4 py-2 bg-red-600 hover:bg-red-500 font-semibold text-white rounded-xl text-xs transition cursor-pointer shadow-md shadow-red-600/20">Delete Listing</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- Modal: Bulk Import Listings -->
 <div id="importModal" class="hidden fixed inset-0 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 z-50" onclick="handleModalBackdrop(event, 'importModal')">
   <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl" onclick="event.stopPropagation()">
@@ -717,6 +863,7 @@ async function handleLogin(e) {
 function enterDashboard() {
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('dashboard').classList.remove('hidden');
+  initRealtimeSubscription();
   loadStats();
   loadListings();
   loadLandlords();
@@ -726,6 +873,7 @@ function enterDashboard() {
 }
 
 function showLoginScreen(msg) {
+  closeRealtimeSubscription();
   document.getElementById('dashboard').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
   if (msg) {
@@ -737,6 +885,7 @@ function showLoginScreen(msg) {
 }
 
 async function handleLogout() {
+  closeRealtimeSubscription();
   try {
     await adminFetch('/api/admin/logout', { method: 'POST' });
   } catch (e) {}
@@ -798,22 +947,28 @@ async function loadStats() {
     const requests = stats.requests || { total: 0, active: 0 };
 
     document.getElementById('statsGrid').innerHTML = `
-      ${statCard('Active Listings', listings.active || 0, 'text-emerald-400')}
-      ${statCard('Pending Review', listings.pending || 0, 'text-amber-400')}
-      ${statCard('🚩 Flagged', listings.flagged || 0, 'text-rose-400')}
-      ${statCard('Total Landlords', landlords.total || 0, 'text-blue-400')}
-      ${statCard('Paid Subscribers', landlords.paid || 0, 'text-emerald-400')}
-      ${statCard('Room Requests', requests.total || requests.active || 0, 'text-purple-400')}
+      ${statCard('Active Listings', listings.active || 0, 'text-emerald-400', "filterByStatus('active')", 'Click to view active listings only')}
+      ${statCard('Pending Review', listings.pending || 0, 'text-amber-400', "filterByStatus('pending_review')", 'Click to view pending reviews only')}
+      ${statCard('🚩 Flagged', listings.flagged || 0, 'text-rose-400', "filterByStatus('flagged')", 'Click to view flagged listings only')}
+      ${statCard('Total Landlords', landlords.total || 0, 'text-blue-400', "switchTab('landlords')", 'Click to manage landlords')}
+      ${statCard('Paid Subscribers', landlords.paid || 0, 'text-emerald-400', "switchTab('landlords')", 'Click to view paid landlords')}
+      ${statCard('Room Requests', requests.total || requests.active || 0, 'text-purple-400', "switchTab('requests')", 'Click to view room requests')}
     `;
   } catch (err) {
     console.error('Error loading stats:', err);
   }
 }
 
-function statCard(label, val, colorClass = 'text-white') {
+function statCard(label, val, colorClass = 'text-white', onClickCode = '', titleHint = '') {
+  const cursor = onClickCode ? 'cursor-pointer hover:border-rose-500/80 hover:bg-slate-800 transition transform hover:-translate-y-0.5' : '';
+  const clickAttr = onClickCode ? `onclick="${onClickCode}" role="button" tabindex="0"` : '';
+  const titleAttr = titleHint ? `title="${titleHint}"` : '';
   return `
-    <div class="bg-slate-800/90 border border-slate-700/80 rounded-xl p-4 flex flex-col justify-between shadow-sm">
-      <div class="text-2xl font-black ${colorClass} tracking-tight">${val}</div>
+    <div ${clickAttr} ${titleAttr} class="bg-slate-800/90 border border-slate-700/80 rounded-xl p-4 flex flex-col justify-between shadow-sm ${cursor}">
+      <div class="flex items-center justify-between">
+        <div class="text-2xl font-black ${colorClass} tracking-tight">${val}</div>
+        ${onClickCode ? '<span class="text-xs text-slate-500 hover:text-white transition">↗</span>' : ''}
+      </div>
       <div class="text-[11px] font-medium text-slate-400 mt-1 uppercase tracking-wider">${escapeHtml(label)}</div>
     </div>
   `;
@@ -822,6 +977,50 @@ function statCard(label, val, colorClass = 'text-white') {
 // ----------------------------------------------------
 // Listings Management Logic
 // ----------------------------------------------------
+let currentListingStatus = 'all';
+
+function filterByStatus(status) {
+  currentListingStatus = status || 'all';
+  switchTab('listings');
+
+  // Sync select dropdown
+  const sel = document.getElementById('statusFilter');
+  if (sel) {
+    sel.value = currentListingStatus;
+  }
+
+  // If status is flagged, set showFlaggedOnly
+  if (currentListingStatus === 'flagged') {
+    showFlaggedOnly = true;
+  } else {
+    showFlaggedOnly = false;
+  }
+  const flaggedBtn = document.getElementById('flaggedToggleBtn');
+  if (flaggedBtn) {
+    if (showFlaggedOnly) {
+      flaggedBtn.classList.add('border-red-500', 'text-red-400', 'bg-red-950/30');
+    } else {
+      flaggedBtn.classList.remove('border-red-500', 'text-red-400', 'bg-red-950/30');
+    }
+  }
+
+  updateStatusFilterPillsUI();
+  loadListings();
+}
+
+function updateStatusFilterPillsUI() {
+  const pills = ['all', 'active', 'pending_review', 'flagged', 'suspended', 'rejected'];
+  pills.forEach(p => {
+    const pillBtn = document.getElementById(`statusPill-${p}`);
+    if (!pillBtn) return;
+    if (p === currentListingStatus) {
+      pillBtn.className = 'status-pill px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer bg-rose-500 text-white shadow-sm flex items-center gap-1.5';
+    } else {
+      pillBtn.className = 'status-pill px-3 py-1.5 rounded-xl font-semibold transition cursor-pointer bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 border border-slate-700 flex items-center gap-1.5';
+    }
+  });
+}
+
 function debounceSearchListings() {
   clearTimeout(searchDebounceTimer);
   searchDebounceTimer = setTimeout(loadListings, 300);
@@ -829,165 +1028,665 @@ function debounceSearchListings() {
 
 function toggleFlaggedOnly() {
   showFlaggedOnly = !showFlaggedOnly;
+  if (showFlaggedOnly) {
+    currentListingStatus = 'flagged';
+  } else if (currentListingStatus === 'flagged') {
+    currentListingStatus = 'all';
+  }
+  const sel = document.getElementById('statusFilter');
+  if (sel) sel.value = currentListingStatus;
+
   const btn = document.getElementById('flaggedToggleBtn');
   if (showFlaggedOnly) {
     btn.classList.add('border-red-500', 'text-red-400', 'bg-red-950/30');
   } else {
     btn.classList.remove('border-red-500', 'text-red-400', 'bg-red-950/30');
   }
+  updateStatusFilterPillsUI();
   loadListings();
 }
 
+// ----------------------------------------------------
+// Real-Time Server-Sent Events (SSE) Subscription
+// ----------------------------------------------------
+let adminEventSource = null;
+let realtimeReconnectTimer = null;
+
+function updateRealtimeStatus(status, text) {
+  const badge = document.getElementById('realtimeStatusBadge');
+  const dot = document.getElementById('realtimeStatusDot');
+  const label = document.getElementById('realtimeStatusText');
+  if (!badge || !dot || !label) return;
+
+  if (status === 'connected') {
+    badge.className = 'text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-emerald-950/60 border border-emerald-800/40 text-emerald-300 flex items-center gap-1.5 transition';
+    dot.className = 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse';
+    label.innerText = text || 'Live Updates Active';
+  } else if (status === 'reconnecting') {
+    badge.className = 'text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-amber-950/60 border border-amber-800/40 text-amber-300 flex items-center gap-1.5 transition';
+    dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-ping';
+    label.innerText = text || 'Live updates temporarily unavailable. Reconnecting...';
+  } else {
+    badge.className = 'text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-400 flex items-center gap-1.5 transition';
+    dot.className = 'w-2 h-2 rounded-full bg-slate-500';
+    label.innerText = text || 'Live Updates Paused';
+  }
+}
+
+function closeRealtimeSubscription() {
+  if (adminEventSource) {
+    try {
+      adminEventSource.close();
+    } catch (_) {}
+    adminEventSource = null;
+  }
+  if (realtimeReconnectTimer) {
+    clearTimeout(realtimeReconnectTimer);
+    realtimeReconnectTimer = null;
+  }
+  updateRealtimeStatus('disconnected', 'Live Updates Paused');
+}
+
+function initRealtimeSubscription() {
+  // Prevent duplicate connections: close any existing connection first
+  closeRealtimeSubscription();
+
+  const token = localStorage.getItem('rentaroom_admin_token');
+  const streamUrl = `/api/admin/listings/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+
+  updateRealtimeStatus('reconnecting', 'Connecting live stream...');
+
+  try {
+    adminEventSource = new EventSource(streamUrl, { withCredentials: true });
+
+    adminEventSource.onopen = () => {
+      updateRealtimeStatus('connected', 'Live Updates Active');
+    };
+
+    adminEventSource.onerror = () => {
+      // EventSource automatically handles reconnection; update UI feedback
+      updateRealtimeStatus('reconnecting', 'Live updates temporarily unavailable. Reconnecting...');
+    };
+
+    adminEventSource.addEventListener('connected', () => {
+      updateRealtimeStatus('connected', 'Live Updates Active');
+    });
+
+    // 1. New Listing Arrives: arrives in real time at the top
+    adminEventSource.addEventListener('listing:created', (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        const listing = payload.listing;
+        if (!listing || !listing._id) return;
+        handleRealtimeListingCreated(listing);
+      } catch (err) {
+        console.warn('Error processing listing:created SSE:', err);
+      }
+    });
+
+    // 2. Listing Approved: updates status, removes from pending, shows under approved
+    adminEventSource.addEventListener('listing:approved', (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        const listing = payload.listing;
+        const listingId = payload.listingId || (listing && listing._id);
+        if (!listingId) return;
+        handleRealtimeListingApproved(listingId, listing);
+      } catch (err) {
+        console.warn('Error processing listing:approved SSE:', err);
+      }
+    });
+
+    // 3. Listing Rejected: updates status, removes from pending, shows under rejected
+    adminEventSource.addEventListener('listing:rejected', (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        const listing = payload.listing;
+        const listingId = payload.listingId || (listing && listing._id);
+        if (!listingId) return;
+        handleRealtimeListingRejected(listingId, listing);
+      } catch (err) {
+        console.warn('Error processing listing:rejected SSE:', err);
+      }
+    });
+
+    // 4. Listing Suspended
+    adminEventSource.addEventListener('listing:suspended', (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        const listing = payload.listing;
+        const listingId = payload.listingId || (listing && listing._id);
+        if (!listingId) return;
+        handleRealtimeListingSuspended(listingId, listing);
+      } catch (err) {
+        console.warn('Error processing listing:suspended SSE:', err);
+      }
+    });
+
+    // 5. Listing Deleted
+    adminEventSource.addEventListener('listing:deleted', (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        const listingId = payload.listingId;
+        if (!listingId) return;
+        handleRealtimeListingDeleted(listingId);
+      } catch (err) {
+        console.warn('Error processing listing:deleted SSE:', err);
+      }
+    });
+
+    // 6. Listing Updated
+    adminEventSource.addEventListener('listing:updated', (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        const listing = payload.listing;
+        if (!listing || !listing._id) return;
+        handleRealtimeListingUpdated(listing);
+      } catch (err) {
+        console.warn('Error processing listing:updated SSE:', err);
+      }
+    });
+
+    // 7. Status changed event
+    adminEventSource.addEventListener('listing:status_changed', (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        const listingId = payload.listingId || (payload.listing && payload.listing._id);
+        if (!listingId) return;
+        if (payload.action === 'approve') {
+          handleRealtimeListingApproved(listingId, payload.listing);
+        } else if (payload.action === 'reject') {
+          handleRealtimeListingRejected(listingId, payload.listing);
+        } else if (payload.action === 'suspend') {
+          handleRealtimeListingSuspended(listingId, payload.listing);
+        } else if (payload.action === 'delete') {
+          handleRealtimeListingDeleted(listingId);
+        }
+      } catch (err) {}
+    });
+
+    // 8. Room Request Created
+    adminEventSource.addEventListener('request:created', () => {
+      try {
+        if (currentTab === 'requests') loadRequests();
+        loadStats();
+      } catch (_) {}
+    });
+
+  } catch (initErr) {
+    console.warn('Failed to start EventSource:', initErr);
+    updateRealtimeStatus('reconnecting', 'Live updates temporarily unavailable. Reconnecting...');
+  }
+}
+
+// Clean up listeners on window unload or pagehide
+window.addEventListener('beforeunload', closeRealtimeSubscription);
+window.addEventListener('pagehide', closeRealtimeSubscription);
+
+// ----------------------------------------------------
+// Real-Time Event Handlers & State Management
+// ----------------------------------------------------
+
+function handleRealtimeListingCreated(listing) {
+  const listingId = String(listing._id);
+
+  // Duplicate protection: check if listing already exists in cache
+  const existingIdx = listingsCache.findIndex(l => String(l._id) === listingId);
+  if (existingIdx !== -1) {
+    listingsCache[existingIdx] = { ...listingsCache[existingIdx], ...listing };
+  } else {
+    // Insert new incoming listing
+    listingsCache.push(listing);
+  }
+
+  // Strictly enforce newest-first ordering: createdAt DESC
+  listingsCache.sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  updatePillCounts(listingsCache);
+  loadStats();
+
+  const isPending = isListingPending(listing);
+  // If user is currently looking at Pending or All, re-render immediately so it appears at top
+  if (currentListingStatus === 'all' || (currentListingStatus === 'pending_review' && isPending)) {
+    renderFilteredListings();
+    showToast(`🔔 New listing pending review: "${listing.title}"`, 'info');
+  }
+}
+
+function handleRealtimeListingApproved(listingId, updatedListing) {
+  const idStr = String(listingId);
+  const idx = listingsCache.findIndex(l => String(l._id) === idStr);
+  if (idx !== -1) {
+    listingsCache[idx] = {
+      ...listingsCache[idx],
+      ...(updatedListing || {}),
+      status: 'active',
+      publicationStatus: 'PUBLISHED'
+    };
+  }
+
+  updatePillCounts(listingsCache);
+  loadStats();
+
+  // If currently on pending_review: approved listing disappears immediately!
+  // If currently on active or all: card updates to approved state
+  renderFilteredListings();
+}
+
+function handleRealtimeListingRejected(listingId, updatedListing) {
+  const idStr = String(listingId);
+  const idx = listingsCache.findIndex(l => String(l._id) === idStr);
+  if (idx !== -1) {
+    listingsCache[idx] = {
+      ...listingsCache[idx],
+      ...(updatedListing || {}),
+      status: 'rejected',
+      publicationStatus: 'REJECTED'
+    };
+  }
+
+  updatePillCounts(listingsCache);
+  loadStats();
+
+  // If currently on pending_review: rejected listing disappears immediately!
+  renderFilteredListings();
+}
+
+function handleRealtimeListingSuspended(listingId, updatedListing) {
+  const idStr = String(listingId);
+  const idx = listingsCache.findIndex(l => String(l._id) === idStr);
+  if (idx !== -1) {
+    listingsCache[idx] = {
+      ...listingsCache[idx],
+      ...(updatedListing || {}),
+      status: 'suspended',
+      publicationStatus: 'SUSPENDED'
+    };
+  }
+  updatePillCounts(listingsCache);
+  loadStats();
+  renderFilteredListings();
+}
+
+function handleRealtimeListingDeleted(listingId) {
+  const idStr = String(listingId);
+  listingsCache = listingsCache.filter(l => String(l._id) !== idStr);
+  updatePillCounts(listingsCache);
+  loadStats();
+  renderFilteredListings();
+}
+
+function handleRealtimeListingUpdated(updatedListing) {
+  const idStr = String(updatedListing._id);
+  const idx = listingsCache.findIndex(l => String(l._id) === idStr);
+  if (idx !== -1) {
+    listingsCache[idx] = { ...listingsCache[idx], ...updatedListing };
+  } else {
+    listingsCache.push(updatedListing);
+  }
+
+  // Preserve newest-first ordering
+  listingsCache.sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  updatePillCounts(listingsCache);
+  loadStats();
+  renderFilteredListings();
+}
+
+function isListingPending(l) {
+  const st = (l.status || '').toLowerCase();
+  const pubSt = (l.publicationStatus || '').toUpperCase();
+  return st === 'pending_review' || st === 'pending' || pubSt === 'PENDING';
+}
+
+function isListingApproved(l) {
+  const st = (l.status || '').toLowerCase();
+  const pubSt = (l.publicationStatus || '').toUpperCase();
+  return st === 'active' || st === 'approved' || pubSt === 'PUBLISHED';
+}
+
+function isListingRejected(l) {
+  const st = (l.status || '').toLowerCase();
+  const pubSt = (l.publicationStatus || '').toUpperCase();
+  return st === 'rejected' || pubSt === 'REJECTED';
+}
+
+function isListingSuspended(l) {
+  const st = (l.status || '').toLowerCase();
+  const pubSt = (l.publicationStatus || '').toUpperCase();
+  return st === 'suspended' || pubSt === 'SUSPENDED';
+}
+
+// ----------------------------------------------------
+// Listings Data Fetching & Rendering
+// ----------------------------------------------------
+
 async function loadListings() {
   const table = document.getElementById('listingsTable');
-  const status = document.getElementById('statusFilter').value;
-  const keyword = (document.getElementById('listingSearchInput').value || '').trim();
+  const status = currentListingStatus || (document.getElementById('statusFilter') ? document.getElementById('statusFilter').value : 'all');
+  const keyword = (document.getElementById('listingSearchInput') ? document.getElementById('listingSearchInput').value : '').trim();
 
   const params = new URLSearchParams();
   if (status && status !== 'all') params.set('status', status);
   if (keyword) params.set('keyword', keyword);
-  if (showFlaggedOnly) params.set('flagged', 'true');
+  if (showFlaggedOnly || status === 'flagged') params.set('flagged', 'true');
+  // Enforce newest-first ordering at query/database level
+  params.set('sortBy', 'createdAt');
+  params.set('order', 'desc');
 
   try {
     const res = await adminFetch(`/api/admin/listings?${params.toString()}`);
     const data = await res.json();
-    const listings = data.data || data.listings || [];
-    listingsCache = listings;
+    let listings = data.data || data.listings || [];
 
+    // Ensure client cache sorts by createdAt DESC
+    listings.sort((a, b) => {
+      const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return timeB - timeA;
+    });
+
+    listingsCache = listings;
     document.getElementById('badge-listings-count').innerText = listings.length;
 
-    if (!listings.length) {
-      table.innerHTML = `
-        <div class="bg-slate-800/40 border border-slate-700/60 rounded-2xl p-12 text-center">
-          <div class="text-3xl mb-2">🏠</div>
-          <p class="text-sm font-semibold text-slate-300">No listings found matching the criteria.</p>
-          <p class="text-xs text-slate-500 mt-1">Try clearing filters or adding new backroom listings.</p>
-        </div>
-      `;
-      return;
+    // Fetch all listings once to accurately compute pill counts across all statuses
+    if (status === 'all' && !keyword) {
+      updatePillCounts(listings);
+    } else {
+      adminFetch('/api/admin/listings?status=all&sortBy=createdAt&order=desc').then(r => r.json()).then(allData => {
+        const allList = allData.data || allData.listings || [];
+        updatePillCounts(allList);
+      }).catch(() => {});
     }
 
-    table.innerHTML = listings.map(l => {
-      const landlordName = (l.landlordId && l.landlordId.fullName) || l.landlordFullName || 'Direct Landlord';
-      const landlordPhone = (l.landlordId && l.landlordId.phone) || l.phone || 'Phone hidden';
-      const isVerified = l.landlordId ? l.landlordId.isPhoneVerified : true;
-      const isFlagged = l.flagged || (l.reportCount && l.reportCount > 0);
-      
-      const st = (l.status || '').toLowerCase();
-      const pubSt = (l.publicationStatus || '').toUpperCase();
-      const isApproved = st === 'active' || st === 'approved' || pubSt === 'PUBLISHED';
-      const isPending = st === 'pending_review' || st === 'pending' || pubSt === 'PENDING';
-      const isRejected = st === 'rejected' || pubSt === 'REJECTED';
-      const isSuspended = st === 'suspended' || pubSt === 'SUSPENDED';
-
-      let statusBadge = '';
-      if (isApproved) {
-        statusBadge = '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-active font-semibold flex items-center gap-1"><span>🌐</span> Approved & Published</span>';
-      } else if (isPending) {
-        statusBadge = '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-pending font-semibold flex items-center gap-1"><span>⏳</span> Pending Review</span>';
-      } else if (isRejected) {
-        statusBadge = '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-rejected font-semibold flex items-center gap-1"><span>❌</span> Rejected</span>';
-      } else if (isSuspended) {
-        statusBadge = '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-flagged font-semibold flex items-center gap-1"><span>🚫</span> Suspended</span>';
-      } else {
-        statusBadge = `<span class="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300 font-semibold uppercase">${escapeHtml(l.status)}</span>`;
-      }
-
-      const escapedTitle = escapeHtml(l.title).replace(/'/g, "\\'");
-
-      return `
-        <div class="bg-slate-800/90 border ${isFlagged ? 'border-red-500/70 shadow-red-950/20 shadow-lg' : 'border-slate-700/80'} rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition hover:border-slate-600">
-          <div class="space-y-1.5 flex-1 min-w-0">
-            <div class="flex items-center gap-2 flex-wrap">
-              ${isFlagged ? '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-flagged font-bold flex items-center gap-1">🚩 Flagged</span>' : ''}
-              ${statusBadge}
-              <span class="text-xs px-2 py-0.5 rounded-md bg-slate-700/60 text-slate-300">${escapeHtml(l.propertyType || 'Backroom')}</span>
-              <span class="text-xs text-slate-400">• ${escapeHtml(l.suburb || 'Soweto')}</span>
-            </div>
-            
-            <h4 class="text-base font-bold text-white truncate">${escapeHtml(l.title)}</h4>
-            
-            <div class="flex items-center gap-3 text-xs text-slate-400 flex-wrap">
-              <span class="text-emerald-400 font-bold text-sm">R${l.monthlyRent} <span class="text-[10px] font-normal text-slate-400">/month</span></span>
-              <span>•</span>
-              <span>👤 ${escapeHtml(landlordName)}</span>
-              <span>•</span>
-              <span class="font-mono">${escapeHtml(landlordPhone)}</span>
-              ${isVerified ? '<span class="text-[10px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-1.5 py-0.2 rounded">✓ Verified</span>' : ''}
-            </div>
-
-            ${l.rejectionReason ? `
-              <div class="p-2 rounded-lg bg-amber-950/40 border border-amber-900/60 text-[11px] text-amber-300 mt-1">
-                <strong>Rejection Reason:</strong> ${escapeHtml(l.rejectionReason)}
-              </div>
-            ` : ''}
-
-            ${l.approvedBy ? `
-              <div class="text-[10px] text-emerald-400/90 flex items-center gap-1 mt-0.5">
-                <span>✓</span> Verified by <strong>${escapeHtml(l.approvedBy)}</strong> ${l.approvedAt ? `on ${new Date(l.approvedAt).toLocaleDateString('en-ZA')}` : ''}
-              </div>
-            ` : ''}
-
-            ${isFlagged && l.flagReasons && l.flagReasons.length ? `
-              <div class="p-2 rounded-lg bg-red-950/40 border border-red-900/60 text-[11px] text-red-300 mt-2">
-                <strong>Flag details:</strong> ${l.flagReasons.map(escapeHtml).join(' • ')}
-              </div>
-            ` : ''}
-          </div>
-
-          <!-- Moderation Action Buttons -->
-          <div class="flex items-center gap-2 flex-wrap self-start md:self-center">
-            ${!isApproved ? `
-              <button onclick="approveListingItem('${l._id}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer shadow-sm flex items-center gap-1">
-                <span>✓</span><span>Approve</span>
-              </button>
-            ` : ''}
-            ${!isRejected ? `
-              <button onclick="openRejectListingModal('${l._id}', '${escapedTitle}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-amber-600/80 hover:bg-amber-500 text-white transition cursor-pointer shadow-sm flex items-center gap-1">
-                <span>✗</span><span>Reject</span>
-              </button>
-            ` : ''}
-            ${!isSuspended ? `
-              <button onclick="suspendListingItem('${l._id}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 transition cursor-pointer flex items-center gap-1">
-                <span>🚫</span><span>Suspend</span>
-              </button>
-            ` : ''}
-            ${isFlagged ? `
-              <button onclick="clearListingFlag('${l._id}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 transition cursor-pointer">
-                Clear Flag
-              </button>
-            ` : ''}
-            <button onclick="openEditListingModal('${l._id}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 transition cursor-pointer">
-              Edit
-            </button>
-            <button onclick="deleteListingItem('${l._id}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800/40 transition cursor-pointer">
-              Delete
-            </button>
-          </div>
-        </div>
-      `;
-    }).join('');
+    renderFilteredListings();
   } catch (err) {
     table.innerHTML = '<div class="p-6 text-center text-red-400 text-xs">Error loading listings from server.</div>';
   }
 }
 
+function renderFilteredListings() {
+  const table = document.getElementById('listingsTable');
+  if (!table) return;
+
+  const status = currentListingStatus || (document.getElementById('statusFilter') ? document.getElementById('statusFilter').value : 'all');
+  const keyword = (document.getElementById('listingSearchInput') ? document.getElementById('listingSearchInput').value : '').toLowerCase().trim();
+
+  // Filter listings based on current status and search keyword
+  const visibleListings = listingsCache.filter(l => {
+    const isApproved = isListingApproved(l);
+    const isPending = isListingPending(l);
+    const isRejected = isListingRejected(l);
+    const isSuspended = isListingSuspended(l);
+    const isFlagged = l.flagged || (l.reportCount && l.reportCount > 0);
+
+    if (showFlaggedOnly || status === 'flagged') {
+      if (!isFlagged) return false;
+    } else if (status === 'active') {
+      if (!isApproved) return false;
+    } else if (status === 'pending_review') {
+      if (!isPending) return false;
+    } else if (status === 'rejected') {
+      if (!isRejected) return false;
+    } else if (status === 'suspended') {
+      if (!isSuspended) return false;
+    }
+
+    if (keyword) {
+      const titleMatch = (l.title || '').toLowerCase().includes(keyword);
+      const suburbMatch = (l.suburb || '').toLowerCase().includes(keyword);
+      const addrMatch = (l.address || '').toLowerCase().includes(keyword);
+      const landlordMatch = ((l.landlordId && l.landlordId.fullName) || l.landlordFullName || '').toLowerCase().includes(keyword);
+      if (!titleMatch && !suburbMatch && !addrMatch && !landlordMatch) return false;
+    }
+
+    return true;
+  });
+
+  // Always keep visibleListings sorted by createdAt DESC: newest first
+  visibleListings.sort((a, b) => {
+    const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  document.getElementById('badge-listings-count').innerText = visibleListings.length;
+
+  if (!visibleListings.length) {
+    let filterMessage = 'No listings found matching the criteria.';
+    if (status === 'active') filterMessage = 'No active listings found.';
+    if (status === 'pending_review') filterMessage = 'No listings pending review. All caught up! 🎉';
+    if (status === 'flagged') filterMessage = 'No flagged listings found. Clean record! 🛡️';
+    if (status === 'suspended') filterMessage = 'No suspended listings.';
+    if (status === 'rejected') filterMessage = 'No rejected listings.';
+
+    table.innerHTML = `
+      <div class="bg-slate-800/40 border border-slate-700/60 rounded-2xl p-12 text-center">
+        <div class="text-3xl mb-2">🏠</div>
+        <p class="text-sm font-semibold text-slate-300">${filterMessage}</p>
+        <div class="mt-3 flex justify-center gap-2">
+          <button onclick="filterByStatus('all')" class="text-xs px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-medium transition cursor-pointer">
+            Show All Listings
+          </button>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  table.innerHTML = visibleListings.map(l => {
+    const landlordName = (l.landlordId && l.landlordId.fullName) || l.landlordFullName || 'Direct Landlord';
+    const landlordPhone = (l.landlordId && l.landlordId.phone) || l.phone || 'Phone hidden';
+    const isVerified = l.landlordId ? l.landlordId.isPhoneVerified : true;
+    const isFlagged = l.flagged || (l.reportCount && l.reportCount > 0);
+
+    const isApproved = isListingApproved(l);
+    const isPending = isListingPending(l);
+    const isRejected = isListingRejected(l);
+    const isSuspended = isListingSuspended(l);
+
+    let statusBadge = '';
+    if (isApproved) {
+      statusBadge = '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-active font-semibold flex items-center gap-1"><span>🌐</span> Active & Published</span>';
+    } else if (isPending) {
+      statusBadge = '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-pending font-semibold flex items-center gap-1"><span>⏳</span> Pending Review</span>';
+    } else if (isRejected) {
+      statusBadge = '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-rejected font-semibold flex items-center gap-1"><span>❌</span> Rejected</span>';
+    } else if (isSuspended) {
+      statusBadge = '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-flagged font-semibold flex items-center gap-1"><span>🚫</span> Suspended</span>';
+    } else {
+      statusBadge = `<span class="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300 font-semibold uppercase">${escapeHtml(l.status)}</span>`;
+    }
+
+    const escapedTitle = escapeHtml(l.title).replace(/'/g, "\\'");
+    const createdDateStr = l.createdAt ? new Date(l.createdAt).toLocaleString('en-ZA', { dateStyle: 'short', timeStyle: 'short' }) : 'Recently';
+
+    return `
+      <div id="listing-card-${l._id}" class="bg-slate-800/90 border ${isFlagged ? 'border-red-500/70 shadow-red-950/20 shadow-lg' : 'border-slate-700/80'} rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition hover:border-slate-600">
+        <div class="space-y-1.5 flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            ${isFlagged ? '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-flagged font-bold flex items-center gap-1">🚩 Flagged</span>' : ''}
+            ${statusBadge}
+            <span class="text-xs px-2 py-0.5 rounded-md bg-slate-700/60 text-slate-300">${escapeHtml(l.propertyType || 'Backroom')}</span>
+            <span class="text-xs text-slate-400">• ${escapeHtml(l.suburb || 'Soweto')}</span>
+            <span class="text-[10px] text-slate-500 ml-auto sm:ml-0 font-mono" title="Date submitted">📅 ${createdDateStr}</span>
+          </div>
+          
+          <h4 class="text-base font-bold text-white truncate">${escapeHtml(l.title)}</h4>
+          
+          <div class="flex items-center gap-3 text-xs text-slate-400 flex-wrap">
+            <span class="text-emerald-400 font-bold text-sm">R${l.monthlyRent} <span class="text-[10px] font-normal text-slate-400">/month</span></span>
+            <span>•</span>
+            <span>👤 ${escapeHtml(landlordName)}</span>
+            <span>•</span>
+            <span class="font-mono">${escapeHtml(landlordPhone)}</span>
+            ${isVerified ? '<span class="text-[10px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-1.5 py-0.2 rounded">✓ Verified</span>' : ''}
+            <span class="text-slate-500 text-[10px] font-mono">ID: ${escapeHtml(l._id)}</span>
+          </div>
+
+          ${l.rejectionReason ? `
+            <div class="p-2 rounded-lg bg-amber-950/40 border border-amber-900/60 text-[11px] text-amber-300 mt-1">
+              <strong>Rejection Reason:</strong> ${escapeHtml(l.rejectionReason)}
+            </div>
+          ` : ''}
+
+          ${l.approvedBy ? `
+            <div class="text-[10px] text-emerald-400/90 flex items-center gap-1 mt-0.5">
+              <span>✓</span> Verified by <strong>${escapeHtml(l.approvedBy)}</strong> ${l.approvedAt ? `on ${new Date(l.approvedAt).toLocaleDateString('en-ZA')}` : ''}
+            </div>
+          ` : ''}
+
+          ${isFlagged && l.flagReasons && l.flagReasons.length ? `
+            <div class="p-2 rounded-lg bg-red-950/40 border border-red-900/60 text-[11px] text-red-300 mt-2">
+              <strong>Flag details:</strong> ${l.flagReasons.map(escapeHtml).join(' • ')}
+            </div>
+          ` : ''}
+        </div>
+
+        <!-- Moderation Action Buttons -->
+        <div class="flex items-center gap-2 flex-wrap self-start md:self-center">
+          ${isApproved ? `
+            <span class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-emerald-950/70 text-emerald-300 border border-emerald-800/50 flex items-center gap-1.5 shadow-sm">
+              <span>✓</span><span>Approved</span>
+            </span>
+          ` : `
+            <button data-action-approve="${l._id}" onclick="approveListingItem('${l._id}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer shadow-sm flex items-center gap-1">
+              <span>✓</span><span>Approve</span>
+            </button>
+          `}
+          ${!isRejected ? `
+            <button onclick="openRejectListingModal('${l._id}', '${escapedTitle}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-amber-600/80 hover:bg-amber-500 text-white transition cursor-pointer shadow-sm flex items-center gap-1">
+              <span>✗</span><span>Reject</span>
+            </button>
+          ` : ''}
+          ${!isSuspended ? `
+            <button onclick="openSuspendListingModal('${l._id}', '${escapedTitle}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 transition cursor-pointer flex items-center gap-1">
+              <span>🚫</span><span>Suspend</span>
+            </button>
+          ` : `
+            <button onclick="unsuspendListingItem('${l._id}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-amber-900/60 hover:bg-amber-800 text-amber-200 border border-amber-700/50 transition cursor-pointer flex items-center gap-1">
+              <span>↻</span><span>Unsuspend</span>
+            </button>
+          `}
+          ${isFlagged ? `
+            <button onclick="clearListingFlag('${l._id}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 transition cursor-pointer">
+              Clear Flag
+            </button>
+          ` : ''}
+          <button onclick="openEditListingModal('${l._id}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 transition cursor-pointer">
+            Edit
+          </button>
+          <button onclick="openDeleteConfirmModal('${l._id}', '${escapedTitle}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800/40 transition cursor-pointer">
+            Delete
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function updatePillCounts(list) {
+  let active = 0, pending = 0, flagged = 0, suspended = 0, rejected = 0;
+  for (const l of list) {
+    if (l.flagged || (l.reportCount && l.reportCount > 0)) flagged++;
+    if (isListingApproved(l)) active++;
+    else if (isListingPending(l)) pending++;
+    else if (isListingRejected(l)) rejected++;
+    else if (isListingSuspended(l)) suspended++;
+  }
+
+  const setVal = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.innerText = v;
+  };
+  setVal('pillCount-all', list.length);
+  setVal('pillCount-active', active);
+  setVal('pillCount-pending_review', pending);
+  setVal('pillCount-flagged', flagged);
+  setVal('pillCount-suspended', suspended);
+  setVal('pillCount-rejected', rejected);
+}
+
+// ----------------------------------------------------
+// Moderation Action Handlers
+// ----------------------------------------------------
+
 async function approveListingItem(id) {
+  const btn = document.querySelector(`button[data-action-approve="${id}"]`);
+  
+  // Prevent multiple clicks while request is in flight
+  if (btn) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span><span>Approving...</span>';
+  }
+
   try {
     const res = await adminFetch(`/api/admin/listings/${id}/approve`, {
       method: 'POST'
     });
     const data = await res.json();
+
     if (res.ok && data.success) {
-      showToast('Listing approved and published to public catalog! 🚀', 'success');
-      loadListings();
+      showToast('Listing approved and published to public portal! 🚀', 'success');
+
+      // Update local state immediately
+      const item = listingsCache.find(l => String(l._id) === String(id));
+      if (item) {
+        item.status = 'active';
+        item.publicationStatus = 'PUBLISHED';
+        item.approvedBy = currentUser ? (currentUser.fullName || currentUser.email) : 'System Admin';
+        item.approvedAt = new Date();
+      }
+
+      // Update pill counts and dashboard metrics
+      updatePillCounts(listingsCache);
+      loadStats();
+      loadAuditLogs();
+
+      // If viewing Pending Review, the approved listing immediately disappears!
+      renderFilteredListings();
+    } else {
+      // If the database update fails, keep listing in Pending, show error, and re-enable button
+      showToast(data.message || 'Failed to approve listing. Please try again.', 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<span>✓</span><span>Approve</span>';
+      }
+    }
+  } catch (err) {
+    showToast('Network error while approving listing. Please try again.', 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span>✓</span><span>Approve</span>';
+    }
+  }
+}
+
+async function unsuspendListingItem(id) {
+  try {
+    const res = await adminFetch(`/api/admin/listings/${id}/unsuspend`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('Listing unsuspended and restored to active state!', 'success');
+      await loadListings();
       loadStats();
       loadAuditLogs();
     } else {
-      showToast(data.message || 'Failed to approve listing', 'error');
+      showToast(data.message || 'Failed to unsuspend listing', 'error');
     }
   } catch (err) {
-    showToast('Network error while approving listing', 'error');
+    showToast('Network error while unsuspending listing', 'error');
   }
 }
 
@@ -1026,9 +1725,18 @@ async function submitRejectListing(e) {
     if (res.ok && data.success) {
       showToast('Listing rejected and archived with reason logged', 'info');
       toggleModal('rejectModal');
-      loadListings();
+
+      // Update local cache immediately
+      const item = listingsCache.find(l => String(l._id) === String(id));
+      if (item) {
+        item.status = 'rejected';
+        item.publicationStatus = 'REJECTED';
+        item.rejectionReason = reason;
+      }
+      updatePillCounts(listingsCache);
       loadStats();
       loadAuditLogs();
+      renderFilteredListings();
     } else {
       showToast(data.message || 'Failed to reject listing', 'error');
     }
@@ -1040,19 +1748,41 @@ async function submitRejectListing(e) {
   }
 }
 
-async function suspendListingItem(id) {
-  const reason = prompt('Enter suspension reason:', 'Policy violation / pending address re-verification');
-  if (reason === null) return; // user clicked cancel
+function openSuspendListingModal(id, title) {
+  document.getElementById('suspendListingId').value = id;
+  document.getElementById('suspendModalTitle').innerText = title || 'Listing';
+  document.getElementById('suspendReasonInput').value = '';
+  toggleModal('suspendModal');
+}
+
+function setSuspendReasonPreset(reason) {
+  document.getElementById('suspendReasonInput').value = reason;
+}
+
+async function submitSuspendListing(e) {
+  e.preventDefault();
+  const id = document.getElementById('suspendListingId').value;
+  const reason = (document.getElementById('suspendReasonInput').value || '').trim();
+  const btn = document.getElementById('suspendSubmitBtn');
+
+  if (!reason) {
+    showToast('Please specify a suspension reason', 'warning');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerText = 'Suspending...';
 
   try {
     const res = await adminFetch(`/api/admin/listings/${id}/suspend`, {
       method: 'POST',
-      body: JSON.stringify({ reason: reason || 'Suspended by admin' })
+      body: JSON.stringify({ reason })
     });
     const data = await res.json();
 
     if (res.ok && data.success) {
-      showToast('Listing suspended and hidden from public view', 'warning');
+      showToast('Listing suspended and removed from public portal 🚫', 'warning');
+      toggleModal('suspendModal');
       loadListings();
       loadStats();
       loadAuditLogs();
@@ -1061,55 +1791,103 @@ async function suspendListingItem(id) {
     }
   } catch (err) {
     showToast('Network error while suspending listing', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerText = 'Confirm Suspension';
   }
 }
 
-async function updateListingStatus(id, status) {
-  try {
-    const res = await adminFetch(`/api/admin/listings/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status })
-    });
-    if (res.ok) {
-      showToast(`Listing status marked as ${status}`, 'success');
-      loadListings();
-      loadStats();
-      loadAuditLogs();
-    }
-  } catch (err) {
-    showToast('Failed to update listing status', 'error');
-  }
+async function suspendListingItem(id) {
+  const listing = listingsCache.find(l => l._id === id);
+  openSuspendListingModal(id, listing ? listing.title : 'Listing');
 }
 
-async function clearListingFlag(id) {
+function openDeleteConfirmModal(id, title) {
+  document.getElementById('deleteTargetListingId').value = id;
+  document.getElementById('deleteConfirmModalTitle').innerText = title || 'Listing';
+  toggleModal('deleteConfirmModal');
+}
+
+async function confirmDeleteListingAction() {
+  const id = document.getElementById('deleteTargetListingId').value;
+  const btn = document.getElementById('confirmDeleteBtn');
+  if (!id) return;
+
+  btn.disabled = true;
+  btn.innerText = 'Deleting...';
+
   try {
-    const res = await adminFetch(`/api/admin/listings/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ flagged: false, reportCount: 0 })
-    });
-    if (res.ok) {
-      showToast('Flag cleared from listing', 'success');
+    const res = await adminFetch(`/api/admin/listings/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showToast('Listing permanently deleted 🗑️', 'info');
+      toggleModal('deleteConfirmModal');
       loadListings();
       loadStats();
       loadAuditLogs();
+    } else {
+      showToast(data.message || 'Error deleting listing', 'error');
     }
   } catch (err) {
-    showToast('Failed to clear flag', 'error');
+    showToast('Error deleting listing', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerText = 'Delete Listing';
   }
 }
 
 async function deleteListingItem(id) {
-  if (!confirm('Are you sure you want to permanently delete this listing?')) return;
+  const listing = listingsCache.find(l => l._id === id);
+  openDeleteConfirmModal(id, listing ? listing.title : 'Listing');
+}
+
+function openDeleteByIdModal() {
+  const input = document.getElementById('deleteByIdInput');
+  if (input) input.value = '';
+  toggleModal('deleteByIdModal');
+}
+
+async function submitDeleteListingById(e) {
+  e.preventDefault();
+  const idInput = document.getElementById('deleteByIdInput');
+  const id = (idInput ? idInput.value : '').trim();
+  const btn = document.getElementById('deleteByIdSubmitBtn');
+
+  if (!id) {
+    showToast('Please specify a listing ID to delete', 'warning');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = 'Deleting...';
+  }
+
   try {
-    const res = await adminFetch(`/api/admin/listings/${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      showToast('Listing deleted', 'info');
-      loadListings();
+    const res = await adminFetch(`/api/admin/listings/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+
+    if (res.ok && data.success) {
+      showToast(`Listing "${id}" deleted successfully 🗑️`, 'info');
+      toggleModal('deleteByIdModal');
+      // Immediately remove from local memory cache
+      listingsCache = listingsCache.filter(l => String(l._id) !== String(id));
+      // Immediate UI refresh
+      await loadListings();
       loadStats();
       loadAuditLogs();
+    } else {
+      showToast(data.message || `Failed to delete listing ${id}`, 'error');
     }
   } catch (err) {
-    showToast('Error deleting listing', 'error');
+    showToast('Network error while deleting listing', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerText = 'Delete Listing';
+    }
   }
 }
 

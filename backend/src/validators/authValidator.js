@@ -3,8 +3,13 @@ const { validateSouthAfricanMobile } = require('../utils/phoneUtils');
 class AuthValidator {
   static validateRegister(data) {
     const errors = [];
-    if (!data.fullName || typeof data.fullName !== 'string' || data.fullName.trim().length < 2) {
+    const name = (data.fullName || '').trim();
+    if (!name || name.length < 2) {
       errors.push('Full name must be at least 2 characters.');
+    } else if (/\d/.test(name)) {
+      errors.push('Please enter a valid name using letters only.');
+    } else if (!/^[a-zA-Z\u00C0-\u024F\s.'-]+$/.test(name) || name.replace(/[^a-zA-Z]/g, '').length < 2) {
+      errors.push('Please enter a valid name using letters only.');
     }
     if (!data.email && !data.phone) {
       errors.push('Either email or phone number is required.');

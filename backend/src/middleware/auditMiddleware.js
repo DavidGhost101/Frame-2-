@@ -91,6 +91,10 @@ function sanitizePayload(body) {
  * Middleware to log all administrative actions to the AuditLog database collection.
  */
 function auditAdminAction(req, res, next) {
+  const path = (req.baseUrl + (req.path || '')).toLowerCase();
+  if (path.includes('/stream') || path.includes('/live')) {
+    return next();
+  }
   const startTime = Date.now();
   const resource = deriveResource(req);
   const action = deriveAction(req);
