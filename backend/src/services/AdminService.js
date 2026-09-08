@@ -150,17 +150,22 @@ class AdminService {
       }
     }
 
-    // If landlord has an associated User, sync status
+    // If landlord has an associated User, sync status to blocked or active
+    let updatedUserDoc = null;
     if (landlord) {
+      const targetStatus = isBlockedBool ? 'blocked' : 'active';
       try {
         if (landlord.userId) {
-          await User.findByIdAndUpdate(landlord.userId, {
-            status: isBlockedBool ? 'suspended' : 'active'
-          });
+          updatedUserDoc = await User.findByIdAndUpdate(
+            landlord.userId,
+            { status: targetStatus },
+            { new: true }
+          );
         } else if (landlord.phone) {
-          await User.findOneAndUpdate(
+          updatedUserDoc = await User.findOneAndUpdate(
             { phone: landlord.phone },
-            { status: isBlockedBool ? 'suspended' : 'active' }
+            { status: targetStatus },
+            { new: true }
           );
         }
       } catch (_) {}
@@ -170,7 +175,8 @@ class AdminService {
           u => (landlord.phone && u.phone === landlord.phone) || (landlord.userId && String(u._id) === String(landlord.userId))
         );
         if (fbU) {
-          fbU.status = isBlockedBool ? 'suspended' : 'active';
+          fbU.status = targetStatus;
+          if (!updatedUserDoc) updatedUserDoc = fbU;
         }
       }
     }
@@ -197,6 +203,14 @@ class AdminService {
         landlordId: String(landlordId),
         isBlocked: isBlockedBool
       });
+      if (updatedUserDoc) {
+        appEvents.emit('user:updated', {
+          user: updatedUserDoc,
+          userId: String(updatedUserDoc._id || (landlord && landlord.userId)),
+          status: isBlockedBool ? 'blocked' : 'active',
+          role: updatedUserDoc.role
+        });
+      }
     } catch (_) {}
 
     return landlord;
@@ -206,7 +220,7 @@ class AdminService {
    * Moderate listing (Approve, Reject, Suspend, or Archive)
    */
   async moderateListing(listingId, action, adminUser = null, options = {}) {
-    const adminEmail = (adminUser && (adminUser.email || adminUser.username)) || '12rakosadavid@gmail.com';
+    const adminEmail = (adminUser && (adminUser.email || adminUser.username)) || process.env.ADMIN_EMAIL || 'admin@rentaroom.co.za';
     const actorEmail = adminEmail;
     const now = new Date();
 
@@ -385,7 +399,7 @@ class AdminService {
    * Update listing fields with edit protection and audit trail
    */
   async updateListingWithAudit(listingId, updateData, adminUser = null) {
-    const adminEmail = (adminUser && (adminUser.email || adminUser.username)) || '12rakosadavid@gmail.com';
+    const adminEmail = (adminUser && (adminUser.email || adminUser.username)) || process.env.ADMIN_EMAIL || 'admin@rentaroom.co.za';
     const actorEmail = adminEmail;
     const now = new Date();
 

@@ -78,7 +78,7 @@ const landlordSchema = new mongoose.Schema(
 );
 
 landlordSchema.methods.isWithinFreeAccess = function () {
-  return this.isPaidSubscriber || (this.trialEndsAt && this.trialEndsAt > new Date());
+  return true;
 };
 
 module.exports = mongoose.model('Landlord', landlordSchema);

@@ -257,6 +257,24 @@ function buildWhatsAppLinks(phone, rawText = '') {
   };
 }
 
+/**
+ * High-level helper returning validation and formatted representations.
+ */
+function validateAndFormat(phone) {
+  const isValid = validateSouthAfricanMobile(phone);
+  const canonical = normalizeSouthAfricanMobile(phone);
+  const localNormalized = normalizeToLocalMobile(phone);
+  const formatted = formatSouthAfricanMobile(phone);
+  const masked = maskPhoneNumber(phone);
+  return {
+    isValid,
+    canonical,
+    localNormalized,
+    formatted,
+    masked
+  };
+}
+
 module.exports = {
   normalizeSouthAfricanMobile,
   normalizeToLocalMobile,
@@ -265,6 +283,7 @@ module.exports = {
   maskPhoneNumber,
   toWhatsAppNumber,
   buildWhatsAppLinks,
+  validateAndFormat,
   VALID_SA_MOBILE_PREFIXES
 };
 

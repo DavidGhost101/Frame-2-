@@ -50,15 +50,13 @@ router.post('/create', requireAuth, async (req, res) => {
     if (mongoose.connection.readyState === 1) {
       const landlord = await Landlord.findById(req.user.landlordId);
       if (!landlord) return res.status(404).json({ error: 'Landlord account not found.' });
-      if (landlord.isBlocked) return res.status(403).json({ error: 'This account has been blocked from posting listings.' });
-      if (!landlord.isWithinFreeAccess()) {
-        return res.status(402).json({
-          error: 'Your free 3-month trial has ended. Contact the site admin to upgrade and keep posting.'
-        });
-      }
+      if (landlord.isBlocked) return res.status(403).json({ error: 'This account has been blocked from posting or editing listings.' });
+
+      const storageService = require('../backend/src/services/StorageService');
+      const sanitizedImage = await storageService.sanitizeListingImage(image);
 
       const scamCheck = await evaluateListingForScamSignals(Listing, {
-        title, address, amenities, image, monthlyRent, landlordId: landlord._id
+        title, address, amenities, image: sanitizedImage, monthlyRent, landlordId: landlord._id
       });
 
       const listing = await Listing.create({
@@ -69,7 +67,7 @@ router.post('/create', requireAuth, async (req, res) => {
         monthlyRent: Number(monthlyRent),
         propertyType: propertyType || 'Backroom',
         amenities: Array.isArray(amenities) ? amenities.slice(0, 15) : [],
-        image: image || '',
+        image: sanitizedImage || '',
         nearbyInstitution: nearbyInstitution ? String(nearbyInstitution).slice(0, 100) : '',
         status: 'pending_review',
         source: 'landlord',
@@ -77,21 +75,41 @@ router.post('/create', requireAuth, async (req, res) => {
         flagReasons: scamCheck.reasons
       });
 
+      try {
+        const appEvents = require('../backend/src/events/eventEmitter');
+        appEvents.emit('listing:created', listing);
+      } catch (_) {}
+
       return res.status(201).json({ success: true, listingId: listing._id, listing });
     } else {
       // In-memory fallback
+      const landlordId = req.user?.landlordId || 'landlord_001';
+      const fbL = fallbackStore.getLandlordById ? fallbackStore.getLandlordById(landlordId) : null;
+      if (fbL && fbL.isBlocked) {
+        return res.status(403).json({ error: 'This account has been blocked from posting or editing listings.' });
+      }
+
+      const storageService = require('../backend/src/services/StorageService');
+      const sanitizedImage = await storageService.sanitizeListingImage(image);
+
       const newListing = fallbackStore.addListing({
-        landlordId: req.user?.landlordId || 'landlord_001',
+        landlordId,
         title: String(title).slice(0, 120),
         suburb: String(suburb).slice(0, 60),
         address: String(address).slice(0, 200),
         monthlyRent: Number(monthlyRent),
         propertyType: propertyType || 'Backroom',
         amenities: Array.isArray(amenities) ? amenities.slice(0, 15) : [],
-        image: image || '',
+        image: sanitizedImage || '',
         nearbyInstitution: nearbyInstitution ? String(nearbyInstitution).slice(0, 100) : '',
         status: 'pending_review'
       });
+
+      try {
+        const appEvents = require('../backend/src/events/eventEmitter');
+        appEvents.emit('listing:created', newListing);
+      } catch (_) {}
+
       return res.status(201).json({ success: true, listingId: newListing._id, listing: newListing });
     }
   } catch (err) {
@@ -103,9 +121,23 @@ router.post('/create', requireAuth, async (req, res) => {
 // BROWSE active listings (public), with filters
 router.get('/', async (req, res) => {
   try {
-    const { suburb, maxRent, propertyType, page = 1, limit = 20 } = req.query;
+    const { suburb, maxRent, propertyType, page = 1, limit = 20, keyword, sort, sortBy = 'createdAt', order = 'desc' } = req.query;
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(50, Math.max(1, parseInt(limit)));
+
+    let effectiveSortBy = sortBy;
+    let effectiveOrder = (order || 'desc').toLowerCase();
+    if (sort === 'price_asc' || (['price', 'monthlyRent'].includes(sortBy) && effectiveOrder === 'asc')) {
+      effectiveSortBy = 'monthlyRent';
+      effectiveOrder = 'asc';
+    } else if (sort === 'price_desc' || (['price', 'monthlyRent'].includes(sortBy) && effectiveOrder === 'desc')) {
+      effectiveSortBy = 'monthlyRent';
+      effectiveOrder = 'desc';
+    } else if (sort === 'newest') {
+      effectiveSortBy = 'createdAt';
+      effectiveOrder = 'desc';
+    }
+    const sortOrderVal = effectiveOrder === 'asc' ? 1 : -1;
 
     if (mongoose.connection.readyState === 1) {
       const query = { status: 'active' };
@@ -113,9 +145,22 @@ router.get('/', async (req, res) => {
       if (propertyType && propertyType !== 'All') query.propertyType = propertyType;
       if (maxRent) query.monthlyRent = { $lte: Number(maxRent) };
 
+      if (keyword) {
+        const kwRegex = new RegExp(keyword, 'i');
+        query.$or = [
+          { title: kwRegex },
+          { suburb: kwRegex },
+          { address: kwRegex },
+          { nearbyInstitution: kwRegex },
+          { propertyType: kwRegex },
+          { amenities: { $elemMatch: { $regex: kwRegex } } },
+          { description: kwRegex }
+        ];
+      }
+
       const [listings, total] = await Promise.all([
         Listing.find(query)
-          .sort({ createdAt: -1 })
+          .sort({ [effectiveSortBy]: sortOrderVal })
           .skip((pageNum - 1) * limitNum)
           .limit(limitNum)
           .populate('landlordId', 'phone hasWhatsapp showPhonePublicly consentPhonePublic'),
@@ -136,6 +181,39 @@ router.get('/', async (req, res) => {
       }
       if (maxRent) {
         filtered = filtered.filter(l => l.monthlyRent <= Number(maxRent));
+      }
+      if (keyword) {
+        const kw = keyword.toLowerCase();
+        filtered = filtered.filter(l => {
+          const title = (l.title || '').toLowerCase();
+          const sub = (l.suburb || '').toLowerCase();
+          const addr = (l.address || '').toLowerCase();
+          const institution = (l.nearbyInstitution || '').toLowerCase();
+          const propType = (l.propertyType || '').toLowerCase();
+          const desc = (l.description || '').toLowerCase();
+          const amenitiesStr = (l.amenities || []).join(' ').toLowerCase();
+          return title.includes(kw) ||
+                 sub.includes(kw) ||
+                 addr.includes(kw) ||
+                 institution.includes(kw) ||
+                 propType.includes(kw) ||
+                 desc.includes(kw) ||
+                 amenitiesStr.includes(kw);
+        });
+      }
+
+      if (effectiveSortBy === 'monthlyRent' || effectiveSortBy === 'price') {
+        filtered.sort((a, b) => {
+          const priceA = Number(a.monthlyRent) || 0;
+          const priceB = Number(b.monthlyRent) || 0;
+          return sortOrderVal === 1 ? priceA - priceB : priceB - priceA;
+        });
+      } else {
+        filtered.sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return sortOrderVal === 1 ? dateA - dateB : dateB - dateA;
+        });
       }
 
       const total = filtered.length;

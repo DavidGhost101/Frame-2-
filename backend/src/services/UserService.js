@@ -2,6 +2,7 @@ const userRepository = require('../repositories/UserRepository');
 const auditLogRepository = require('../repositories/AuditLogRepository');
 const fallbackStore = require('../../../services/fallbackStore');
 const appEvents = require('../events/eventEmitter');
+const Landlord = require('../models/Landlord');
 
 class UserService {
   async getUsers(queryParams = {}) {
@@ -114,11 +115,42 @@ class UserService {
       throw new Error('User not found.');
     }
 
+    // Sync to Landlord document if this user is a landlord or has matching phone/userId
+    const isBlocked = status === 'blocked' || status === 'suspended';
+    try {
+      let linkedLandlord = null;
+      if (user._id) {
+        linkedLandlord = await Landlord.findOneAndUpdate(
+          { $or: [{ userId: user._id }, { phone: user.phone }] },
+          { isBlocked },
+          { new: true }
+        );
+      }
+      if (fallbackStore && fallbackStore.fallbackLandlords) {
+        const fbL = fallbackStore.fallbackLandlords.find(
+          l => (user.phone && l.phone === user.phone) || (l.userId && String(l.userId) === String(user._id))
+        );
+        if (fbL) {
+          fbL.isBlocked = isBlocked;
+          if (!linkedLandlord) linkedLandlord = fbL;
+        }
+      }
+      if (linkedLandlord) {
+        appEvents.emit('landlord:updated', {
+          landlord: linkedLandlord,
+          landlordId: String(linkedLandlord._id),
+          isBlocked
+        });
+      }
+    } catch (lErr) {
+      console.warn('Error syncing landlord block state on user status update:', lErr.message);
+    }
+
     if (adminUser) {
       await auditLogRepository.logAction({
         userId: adminUser.userId,
         userRole: adminUser.role || 'ADMIN',
-        action: 'UPDATE_USER_STATUS',
+        action: status === 'blocked' ? 'BLOCK_USER' : 'UPDATE_USER_STATUS',
         resource: 'User',
         resourceId: id,
         newValue: { status }
@@ -130,6 +162,11 @@ class UserService {
     } catch (_) {}
 
     return user;
+  }
+
+  async setUserBlocked(id, isBlocked, adminUser = null) {
+    const status = isBlocked ? 'blocked' : 'active';
+    return this.updateUserStatus(id, status, adminUser);
   }
 }
 

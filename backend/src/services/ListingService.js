@@ -5,6 +5,7 @@ const Message = require('../models/Message');
 const fallbackStore = require('../../../services/fallbackStore');
 const mongoose = require('mongoose');
 const appEvents = require('../events/eventEmitter');
+const storageService = require('./StorageService');
 
 // Duplicate submission window cache (prevents duplicate room postings within 30 seconds)
 const recentListingSubmissions = new Map();
@@ -22,23 +23,39 @@ class ListingService {
    * Search and filter listings with pagination
    */
   async getListings(queryParams = {}) {
-    try {
-      const {
-        suburb,
-        propertyType,
-        maxPrice,
-        maxRent,
-        minPrice,
-        amenities,
-        keyword,
-        status = 'active',
-        page = 1,
-        limit = 20,
-        sortBy = 'createdAt',
-        order = 'desc',
-        wifi
-      } = queryParams;
+    const {
+      suburb,
+      propertyType,
+      maxPrice,
+      maxRent,
+      minPrice,
+      amenities,
+      keyword,
+      status = 'active',
+      page = 1,
+      limit = 20,
+      sortBy = 'createdAt',
+      order = 'desc',
+      sort,
+      wifi
+    } = queryParams;
 
+    // Normalize sorting parameters for price low-to-high, price high-to-low, or newest
+    let effectiveSortBy = sortBy;
+    let effectiveOrder = (order || 'desc').toLowerCase();
+
+    if (sort === 'price_asc' || queryParams.sortBy === 'price_asc' || (['price', 'monthlyRent'].includes(sortBy) && effectiveOrder === 'asc')) {
+      effectiveSortBy = 'monthlyRent';
+      effectiveOrder = 'asc';
+    } else if (sort === 'price_desc' || queryParams.sortBy === 'price_desc' || (['price', 'monthlyRent'].includes(sortBy) && effectiveOrder === 'desc')) {
+      effectiveSortBy = 'monthlyRent';
+      effectiveOrder = 'desc';
+    } else if (sort === 'newest') {
+      effectiveSortBy = 'createdAt';
+      effectiveOrder = 'desc';
+    }
+
+    try {
       const effectiveMaxPrice = maxPrice || maxRent;
       const filter = { isDeleted: { $ne: true } };
 
@@ -130,24 +147,28 @@ class ListingService {
       }
 
       if (keyword) {
+        const kwRegex = new RegExp(keyword, 'i');
         filter.$and = filter.$and || [];
         filter.$and.push({
           $or: [
-            { title: new RegExp(keyword, 'i') },
-            { suburb: new RegExp(keyword, 'i') },
-            { address: new RegExp(keyword, 'i') },
-            { nearbyInstitution: new RegExp(keyword, 'i') },
-            { landlordFullName: new RegExp(keyword, 'i') }
+            { title: kwRegex },
+            { suburb: kwRegex },
+            { address: kwRegex },
+            { nearbyInstitution: kwRegex },
+            { propertyType: kwRegex },
+            { amenities: { $elemMatch: { $regex: kwRegex } } },
+            { description: kwRegex },
+            { landlordFullName: kwRegex }
           ]
         });
       }
 
       const skip = (Math.max(1, Number(page)) - 1) * Math.min(100, Number(limit));
-      const sortOrder = order === 'asc' ? 1 : -1;
+      const sortOrder = effectiveOrder === 'asc' ? 1 : -1;
       const pagination = {
         skip,
         limit: Math.min(100, Number(limit)),
-        sort: { [sortBy]: sortOrder }
+        sort: { [effectiveSortBy]: sortOrder }
       };
 
       const { items, total } = await listingRepository.findWithPopulatedLandlord(filter, pagination);
@@ -224,9 +245,19 @@ class ListingService {
             const title = (l.title || '').toLowerCase();
             const sub = (l.suburb || '').toLowerCase();
             const addr = (l.address || '').toLowerCase();
+            const institution = (l.nearbyInstitution || '').toLowerCase();
             const landlord = ((l.landlordId && l.landlordId.fullName) || l.landlordFullName || '').toLowerCase();
             const propType = (l.propertyType || '').toLowerCase();
-            const match = title.includes(kw) || sub.includes(kw) || addr.includes(kw) || landlord.includes(kw) || propType.includes(kw);
+            const desc = (l.description || '').toLowerCase();
+            const amenitiesStr = (l.amenities || []).join(' ').toLowerCase();
+            const match = title.includes(kw) ||
+                          sub.includes(kw) ||
+                          addr.includes(kw) ||
+                          institution.includes(kw) ||
+                          landlord.includes(kw) ||
+                          propType.includes(kw) ||
+                          desc.includes(kw) ||
+                          amenitiesStr.includes(kw);
             if (!match) return false;
           }
           return true;
@@ -245,12 +276,20 @@ class ListingService {
         }
       }
 
-      // Strictly enforce query-level createdAt DESC sorting
-      combinedItems.sort((a, b) => {
-        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return sortOrder === 1 ? dateA - dateB : dateB - dateA;
-      });
+      // Enforce requested sorting (price low-to-high, price high-to-low, or newest)
+      if (effectiveSortBy === 'monthlyRent' || effectiveSortBy === 'price') {
+        combinedItems.sort((a, b) => {
+          const priceA = Number(a.monthlyRent) || 0;
+          const priceB = Number(b.monthlyRent) || 0;
+          return sortOrder === 1 ? priceA - priceB : priceB - priceA;
+        });
+      } else {
+        combinedItems.sort((a, b) => {
+          const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return sortOrder === 1 ? dateA - dateB : dateB - dateA;
+        });
+      }
 
       return { items: combinedItems, total: combinedItems.length, page: Number(page), limit: Number(limit) };
     } catch (err) {
@@ -314,28 +353,43 @@ class ListingService {
               const title = (l.title || '').toLowerCase();
               const sub = (l.suburb || '').toLowerCase();
               const addr = (l.address || '').toLowerCase();
+              const institution = (l.nearbyInstitution || '').toLowerCase();
               const landlord = ((l.landlordId && l.landlordId.fullName) || l.landlordFullName || '').toLowerCase();
               const propType = (l.propertyType || '').toLowerCase();
-              return title.includes(kw) || sub.includes(kw) || addr.includes(kw) || landlord.includes(kw) || propType.includes(kw);
+              const desc = (l.description || '').toLowerCase();
+              const amenitiesStr = (l.amenities || []).join(' ').toLowerCase();
+              return title.includes(kw) ||
+                     sub.includes(kw) ||
+                     addr.includes(kw) ||
+                     institution.includes(kw) ||
+                     landlord.includes(kw) ||
+                     propType.includes(kw) ||
+                     desc.includes(kw) ||
+                     amenitiesStr.includes(kw);
             }
             return true;
           }).map(l => this.populateListingLandlord(l))
         : [];
 
-      // Enforce newest-first ordering on fallback listings
-      const sortField = queryParams.sortBy || 'createdAt';
-      const sortOrder = (queryParams.order || 'desc').toLowerCase() === 'asc' ? 1 : -1;
+      // Enforce requested sorting on fallback listings
+      const isPriceSort = effectiveSortBy === 'monthlyRent' || effectiveSortBy === 'price';
       filtered.sort((a, b) => {
+        if (isPriceSort) {
+          const priceA = Number(a.monthlyRent) || 0;
+          const priceB = Number(b.monthlyRent) || 0;
+          return effectiveOrder === 'asc' ? priceA - priceB : priceB - priceA;
+        }
+        const sortField = effectiveSortBy || 'createdAt';
         const dateA = a[sortField] ? new Date(a[sortField]).getTime() : 0;
         const dateB = b[sortField] ? new Date(b[sortField]).getTime() : 0;
-        return sortOrder === 1 ? dateA - dateB : dateB - dateA;
+        return effectiveOrder === 'asc' ? dateA - dateB : dateB - dateA;
       });
 
       return {
         items: filtered,
         total: filtered.length,
-        page: 1,
-        limit: 20
+        page: Number(page || 1),
+        limit: Number(limit || 20)
       };
     }
   }
@@ -403,6 +457,16 @@ class ListingService {
   async createListing(landlordId, listingData) {
     const phone = listingData.phone ? listingData.phone.trim() : null;
     const scamCheck = ScamDetectionService.evaluate(listingData);
+
+    // Sanitize listing image: automatically upload base64 image to Firebase Storage
+    if (listingData.image) {
+      try {
+        listingData.image = await storageService.sanitizeListingImage(listingData.image);
+      } catch (imgErr) {
+        console.warn('Image Firebase Storage sanitize warning:', imgErr.message);
+      }
+    }
+
     // When a landlord posts a room, it enters pending_review. Once admin approves it, it is published to the public portal.
     const initialStatus = listingData.status === 'active' ? 'active' : 'pending_review';
     const initialPubStatus = initialStatus === 'active' ? 'PUBLISHED' : 'PENDING';
@@ -607,6 +671,14 @@ class ListingService {
    * Update existing listing
    */
   async updateListing(id, landlordId, updateData, isAdmin = false) {
+    if (updateData && updateData.image) {
+      try {
+        updateData.image = await storageService.sanitizeListingImage(updateData.image);
+      } catch (imgErr) {
+        console.warn('Update image Firebase Storage sanitize warning:', imgErr.message);
+      }
+    }
+
     if (!isAdmin && landlordId) {
       let isLandlordBlocked = false;
       try {

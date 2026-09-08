@@ -1,5 +1,6 @@
 // Resilient In-Memory Store: Ensures instant, zero-latency operations
-// even if MongoDB is not connected, preventing buffering timeouts.
+// with automated disk persistence and Cloud Firestore synchronization.
+const persistentStore = require('./persistentStore');
 
 const fallbackLandlords = [
   {
@@ -256,7 +257,7 @@ const fallbackListings = [
     image: '/images/converted_garage.jpg',
     status: 'active',
     publicationStatus: 'PUBLISHED',
-    approvedBy: '12rakosadavid@gmail.com',
+    approvedBy: process.env.ADMIN_EMAIL || 'admin@rentaroom.co.za',
     approvedAt: new Date(Date.now() - 6 * 24 * 3600 * 1000),
     publishedAt: new Date(Date.now() - 6 * 24 * 3600 * 1000),
     source: 'landlord',
@@ -358,6 +359,17 @@ const fallbackRequests = [
   }
 ];
 
+function saveStore() {
+  persistentStore.saveToDisk({
+    listings: fallbackListings,
+    requests: fallbackRequests,
+    landlords: fallbackLandlords,
+    users: fallbackUsers,
+    messages: fallbackMessages,
+    auditLogs: fallbackAuditLogs
+  });
+}
+
 function getLandlordById(id) {
   return fallbackLandlords.find(l => String(l._id) === String(id));
 }
@@ -382,6 +394,8 @@ function addLandlord(data) {
     ...data
   };
   fallbackLandlords.push(newLandlord);
+  saveStore();
+  persistentStore.syncDocToFirestore('landlords', newLandlord._id, newLandlord);
   return newLandlord;
 }
 
@@ -400,7 +414,20 @@ function addListing(data) {
     createdAt: serverTime
   };
   fallbackListings.unshift(newListing);
+  saveStore();
+  persistentStore.syncDocToFirestore('listings', newListing._id, newListing);
   return newListing;
+}
+
+function updateListing(id, updates) {
+  const idx = fallbackListings.findIndex(l => String(l._id) === String(id));
+  if (idx !== -1) {
+    fallbackListings[idx] = { ...fallbackListings[idx], ...updates, updatedAt: new Date() };
+    saveStore();
+    persistentStore.syncDocToFirestore('listings', id, fallbackListings[idx]);
+    return fallbackListings[idx];
+  }
+  return null;
 }
 
 function reportListing(id, reason) {
@@ -412,6 +439,8 @@ function reportListing(id, reason) {
     if (listing.reportCount >= 2) {
       listing.flagged = true;
     }
+    saveStore();
+    persistentStore.syncDocToFirestore('listings', id, listing);
     return listing;
   }
   return null;
@@ -427,13 +456,26 @@ function addRequest(data) {
     ...data
   };
   fallbackRequests.unshift(newReq);
+  saveStore();
+  persistentStore.syncDocToFirestore('room_requests', newReq._id, newReq);
   return newReq;
+}
+
+function updateRequest(id, updates) {
+  const idx = fallbackRequests.findIndex(r => String(r._id) === String(id));
+  if (idx !== -1) {
+    fallbackRequests[idx] = { ...fallbackRequests[idx], ...updates, updatedAt: new Date() };
+    saveStore();
+    persistentStore.syncDocToFirestore('room_requests', id, fallbackRequests[idx]);
+    return fallbackRequests[idx];
+  }
+  return null;
 }
 
 const fallbackAuditLogs = [
   {
     _id: 'audit_001',
-    actorEmail: '12rakosadavid@gmail.com',
+    actorEmail: process.env.ADMIN_EMAIL || 'admin@rentaroom.co.za',
     actorRole: 'ADMIN',
     userRole: 'ADMIN',
     action: 'ADMIN_LOGIN',
@@ -450,7 +492,7 @@ const fallbackAuditLogs = [
   },
   {
     _id: 'audit_002',
-    actorEmail: '12rakosadavid@gmail.com',
+    actorEmail: process.env.ADMIN_EMAIL || 'admin@rentaroom.co.za',
     actorRole: 'ADMIN',
     userRole: 'ADMIN',
     action: 'LISTING_APPROVED',
@@ -475,7 +517,7 @@ function addAuditLog(data) {
   const entityType = data.entityType || data.resource || 'Listing';
   const entityId = data.entityId ? String(data.entityId) : (data.resourceId ? String(data.resourceId) : null);
   const actorRole = data.actorRole || data.userRole || 'ADMIN';
-  const actorEmail = data.actorEmail || (data.details && (data.details.actorEmail || data.details.email)) || '12rakosadavid@gmail.com';
+  const actorEmail = data.actorEmail || (data.details && (data.details.actorEmail || data.details.email)) || process.env.ADMIN_EMAIL || 'admin@rentaroom.co.za';
 
   const newLog = {
     _id: 'audit_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
@@ -507,6 +549,7 @@ function addAuditLog(data) {
   if (fallbackAuditLogs.length > 300) {
     fallbackAuditLogs.pop();
   }
+  saveStore();
   return newLog;
 }
 
@@ -552,6 +595,7 @@ function addMessage(data) {
     ...data
   };
   fallbackMessages.push(newMsg);
+  saveStore();
   return newMsg;
 }
 
@@ -571,6 +615,8 @@ function deleteListing(id) {
     item.publicationStatus = 'UNPUBLISHED';
     // Remove from active array so it will never be returned in queries
     fallbackListings.splice(idx, 1);
+    saveStore();
+    persistentStore.deleteDocFromFirestore('listings', id);
     return item;
   }
   return null;
@@ -584,6 +630,8 @@ function deleteRequest(id) {
     item.status = 'archived';
     // Remove from active array so it will never be returned in queries
     fallbackRequests.splice(idx, 1);
+    saveStore();
+    persistentStore.deleteDocFromFirestore('room_requests', id);
     return item;
   }
   return null;
@@ -597,6 +645,7 @@ function updateUser(id, updateData) {
   const user = fallbackUsers.find(u => String(u._id) === String(id));
   if (user) {
     Object.assign(user, updateData);
+    saveStore();
     return user;
   }
   return null;
@@ -606,6 +655,73 @@ function getAllMessages(limit = 100) {
   return [...fallbackMessages]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, limit);
+}
+
+// Restore state from local storage on bootstrap
+try {
+  const saved = persistentStore.loadFromDisk();
+  if (saved) {
+    if (Array.isArray(saved.listings) && saved.listings.length > 0) {
+      for (const item of saved.listings) {
+        const idx = fallbackListings.findIndex(l => String(l._id) === String(item._id));
+        if (idx >= 0) {
+          fallbackListings[idx] = { ...fallbackListings[idx], ...item };
+        } else {
+          fallbackListings.unshift(item);
+        }
+      }
+    }
+    if (Array.isArray(saved.requests) && saved.requests.length > 0) {
+      for (const item of saved.requests) {
+        const idx = fallbackRequests.findIndex(r => String(r._id) === String(item._id));
+        if (idx >= 0) {
+          fallbackRequests[idx] = { ...fallbackRequests[idx], ...item };
+        } else {
+          fallbackRequests.unshift(item);
+        }
+      }
+    }
+    if (Array.isArray(saved.landlords) && saved.landlords.length > 0) {
+      for (const item of saved.landlords) {
+        const idx = fallbackLandlords.findIndex(l => String(l._id) === String(item._id));
+        if (idx >= 0) {
+          fallbackLandlords[idx] = { ...fallbackLandlords[idx], ...item };
+        } else {
+          fallbackLandlords.push(item);
+        }
+      }
+    }
+    if (Array.isArray(saved.messages) && saved.messages.length > 0) {
+      for (const item of saved.messages) {
+        if (!fallbackMessages.some(m => String(m._id) === String(item._id))) {
+          fallbackMessages.push(item);
+        }
+      }
+    }
+  }
+} catch (loadErr) {
+  console.warn('[fallbackStore] Initial restore note:', loadErr.message);
+}
+
+// Write initial store snapshot to disk
+saveStore();
+
+// Schedule background two-way sync with Cloud Firestore
+setTimeout(() => {
+  persistentStore.syncWithCloud({
+    fallbackListings,
+    fallbackRequests,
+    fallbackLandlords,
+    fallbackUsers,
+    fallbackMessages,
+    fallbackAuditLogs
+  });
+}, 1000);
+
+// Auto-save periodically to persist any in-place mutations
+const autoSaveTimer = setInterval(saveStore, 30000);
+if (autoSaveTimer && typeof autoSaveTimer.unref === 'function') {
+  autoSaveTimer.unref();
 }
 
 module.exports = {
@@ -618,9 +734,11 @@ module.exports = {
   getLandlordByPhone,
   addLandlord,
   addListing,
+  updateListing,
   deleteListing,
   reportListing,
   addRequest,
+  updateRequest,
   deleteRequest,
   getUserById,
   updateUser,
@@ -628,6 +746,7 @@ module.exports = {
   fallbackMessages,
   addMessage,
   getMessagesByListingAndTenant,
-  getAllMessages
+  getAllMessages,
+  saveStore
 };
 

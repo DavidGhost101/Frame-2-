@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const listingController = require('../controllers/ListingController');
 const listingService = require('../services/ListingService');
-const { authenticate, optionalAuth } = require('../middleware/authMiddleware');
+const { authenticate, optionalAuth, checkNotBlocked } = require('../middleware/authMiddleware');
 const { listingCreateLimiter } = require('../middleware/rateLimiters');
 const ApiResponse = require('../utils/apiResponse');
 
@@ -27,11 +27,13 @@ router.get('/mine', authenticate, async (req, res, next) => {
 
 router.get('/:id', listingController.getListingById);
 
-// Create listing (supports direct posting without prior OTP login as well as authenticated landlords)
-router.post('/create', optionalAuth, listingCreateLimiter, listingController.createListing);
-router.post('/', optionalAuth, listingCreateLimiter, listingController.createListing);
+// Create listing with blocked landlord protection (supports direct posting as well as authenticated landlords)
+router.post('/create', optionalAuth, checkNotBlocked, listingCreateLimiter, listingController.createListing);
+router.post('/', optionalAuth, checkNotBlocked, listingCreateLimiter, listingController.createListing);
 
-router.put('/:id', authenticate, listingController.updateListing);
+// Edit listing with blocked landlord protection
+router.put('/:id', authenticate, checkNotBlocked, listingController.updateListing);
+router.patch('/:id', authenticate, checkNotBlocked, listingController.updateListing);
 router.delete('/:id', authenticate, listingController.deleteListing);
 router.post('/:id/contact', listingController.trackContact);
 router.post('/:id/report', listingController.reportListing);

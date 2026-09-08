@@ -57,8 +57,8 @@
           <input 
             type="text" 
             id="adminUsernameInput" 
-            placeholder="12rakosadavid@gmail.com" 
-            value="12rakosadavid@gmail.com"
+            placeholder="Enter admin email or username" 
+            value=""
             required 
             autocomplete="username"
             class="w-full bg-slate-900/90 border border-slate-700 rounded-xl p-3 text-sm text-white placeholder-slate-500 outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 transition pl-10"
@@ -283,8 +283,7 @@
         />
         <select id="landlordStatusFilter" onchange="renderLandlords()" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-rose-500">
           <option value="all">All Landlords</option>
-          <option value="paid">Paid Subscribers</option>
-          <option value="free">Free / Trial</option>
+          <option value="active">Active Landlords</option>
           <option value="blocked">Blocked</option>
         </select>
       </div>
@@ -892,6 +891,10 @@ async function handleLogout() {
   localStorage.removeItem('rentaroom_admin_token');
   localStorage.removeItem('rentaroom_admin_username');
   currentAdminKey = '';
+  const usernameInput = document.getElementById('adminUsernameInput');
+  if (usernameInput) usernameInput.value = '';
+  const passwordInput = document.getElementById('adminPasswordInput');
+  if (passwordInput) passwordInput.value = '';
   showLoginScreen('Logged out successfully.');
   showToast('Logged out of Admin Portal', 'info');
 }
@@ -951,7 +954,7 @@ async function loadStats() {
       ${statCard('Pending Review', listings.pending || 0, 'text-amber-400', "filterByStatus('pending_review')", 'Click to view pending reviews only')}
       ${statCard('🚩 Flagged', listings.flagged || 0, 'text-rose-400', "filterByStatus('flagged')", 'Click to view flagged listings only')}
       ${statCard('Total Landlords', landlords.total || 0, 'text-blue-400', "switchTab('landlords')", 'Click to manage landlords')}
-      ${statCard('Paid Subscribers', landlords.paid || 0, 'text-emerald-400', "switchTab('landlords')", 'Click to view paid landlords')}
+      ${statCard('Verified Landlords', landlords.verified || 0, 'text-emerald-400', "switchTab('landlords')", 'Click to view landlords')}
       ${statCard('Room Requests', requests.total || requests.active || 0, 'text-purple-400', "switchTab('requests')", 'Click to view room requests')}
     `;
   } catch (err) {
@@ -1211,6 +1214,47 @@ function initRealtimeSubscription() {
         if (currentTab === 'requests') loadRequests();
         loadStats();
       } catch (_) {}
+    });
+
+    // 9. Room Request Deleted
+    adminEventSource.addEventListener('request:deleted', (e) => {
+      try {
+        const payload = JSON.parse(e.data || '{}');
+        const reqId = payload.requestId;
+        if (reqId) {
+          requestsCache = requestsCache.filter(r => String(r._id) !== String(reqId));
+          const badge = document.getElementById('badge-requests-count');
+          if (badge) badge.innerText = requestsCache.length;
+          if (currentTab === 'requests') renderRequests();
+        } else {
+          if (currentTab === 'requests') loadRequests();
+        }
+        loadStats();
+      } catch (_) {
+        if (currentTab === 'requests') loadRequests();
+        loadStats();
+      }
+    });
+
+    // 10. Landlord Updated / Blocked
+    adminEventSource.addEventListener('landlord:updated', (e) => {
+      try {
+        const payload = JSON.parse(e.data || '{}');
+        const lId = payload.landlordId || (payload.landlord && payload.landlord._id);
+        if (lId && payload.isBlocked !== undefined) {
+          const idx = landlordsCache.findIndex(l => String(l._id) === String(lId));
+          if (idx !== -1) {
+            landlordsCache[idx].isBlocked = payload.isBlocked;
+            if (currentTab === 'landlords') renderLandlords();
+          }
+        } else {
+          if (currentTab === 'landlords') loadLandlords();
+        }
+        loadStats();
+      } catch (_) {
+        if (currentTab === 'landlords') loadLandlords();
+        loadStats();
+      }
     });
 
   } catch (initErr) {
@@ -1511,26 +1555,33 @@ function renderFilteredListings() {
 
     return `
       <div id="listing-card-${l._id}" class="bg-slate-800/90 border ${isFlagged ? 'border-red-500/70 shadow-red-950/20 shadow-lg' : 'border-slate-700/80'} rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition hover:border-slate-600">
-        <div class="space-y-1.5 flex-1 min-w-0">
-          <div class="flex items-center gap-2 flex-wrap">
-            ${isFlagged ? '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-flagged font-bold flex items-center gap-1">🚩 Flagged</span>' : ''}
-            ${statusBadge}
-            <span class="text-xs px-2 py-0.5 rounded-md bg-slate-700/60 text-slate-300">${escapeHtml(l.propertyType || 'Backroom')}</span>
-            <span class="text-xs text-slate-400">• ${escapeHtml(l.suburb || 'Soweto')}</span>
-            <span class="text-[10px] text-slate-500 ml-auto sm:ml-0 font-mono" title="Date submitted">📅 ${createdDateStr}</span>
-          </div>
-          
-          <h4 class="text-base font-bold text-white truncate">${escapeHtml(l.title)}</h4>
-          
-          <div class="flex items-center gap-3 text-xs text-slate-400 flex-wrap">
-            <span class="text-emerald-400 font-bold text-sm">R${l.monthlyRent} <span class="text-[10px] font-normal text-slate-400">/month</span></span>
-            <span>•</span>
-            <span>👤 ${escapeHtml(landlordName)}</span>
-            <span>•</span>
-            <span class="font-mono">${escapeHtml(landlordPhone)}</span>
-            ${isVerified ? '<span class="text-[10px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-1.5 py-0.2 rounded">✓ Verified</span>' : ''}
-            <span class="text-slate-500 text-[10px] font-mono">ID: ${escapeHtml(l._id)}</span>
-          </div>
+        <div class="flex items-start gap-3.5 flex-1 min-w-0">
+          ${l.image ? `
+            <a href="${escapeHtml(l.image)}" target="_blank" rel="noopener noreferrer" class="group relative block w-16 h-16 rounded-xl overflow-hidden bg-slate-900 border border-slate-700/80 flex-shrink-0 hover:border-rose-500 transition shadow-inner" title="Click to view full room photo">
+              <img src="${escapeHtml(l.image)}" alt="Room photo" class="w-full h-full object-cover group-hover:scale-105 transition" onerror="this.parentElement.style.display='none'" />
+              <span class="absolute bottom-0 inset-x-0 bg-slate-950/80 text-[8px] text-center text-slate-300 font-mono py-0.5">Photo ↗</span>
+            </a>
+          ` : ''}
+          <div class="space-y-1.5 flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              ${isFlagged ? '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-flagged font-bold flex items-center gap-1">🚩 Flagged</span>' : ''}
+              ${statusBadge}
+              <span class="text-xs px-2 py-0.5 rounded-md bg-slate-700/60 text-slate-300">${escapeHtml(l.propertyType || 'Backroom')}</span>
+              <span class="text-xs text-slate-400">• ${escapeHtml(l.suburb || 'Soweto')}</span>
+              <span class="text-[10px] text-slate-500 ml-auto sm:ml-0 font-mono" title="Date submitted">📅 ${createdDateStr}</span>
+            </div>
+            
+            <h4 class="text-base font-bold text-white truncate">${escapeHtml(l.title)}</h4>
+            
+            <div class="flex items-center gap-3 text-xs text-slate-400 flex-wrap">
+              <span class="text-emerald-400 font-bold text-sm">R${l.monthlyRent} <span class="text-[10px] font-normal text-slate-400">/month</span></span>
+              <span>•</span>
+              <span>👤 ${escapeHtml(landlordName)}</span>
+              <span>•</span>
+              <span class="font-mono">${escapeHtml(landlordPhone)}</span>
+              ${isVerified ? '<span class="text-[10px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-1.5 py-0.2 rounded">✓ Verified</span>' : ''}
+              <span class="text-slate-500 text-[10px] font-mono">ID: ${escapeHtml(l._id)}</span>
+            </div>
 
           ${l.rejectionReason ? `
             <div class="p-2 rounded-lg bg-amber-950/40 border border-amber-900/60 text-[11px] text-amber-300 mt-1">
@@ -1550,6 +1601,7 @@ function renderFilteredListings() {
             </div>
           ` : ''}
         </div>
+      </div>
 
         <!-- Moderation Action Buttons -->
         <div class="flex items-center gap-2 flex-wrap self-start md:self-center">
@@ -2037,8 +2089,7 @@ function renderLandlords() {
     const matchesSearch = !search || name.includes(search) || phone.includes(search);
     
     if (!matchesSearch) return false;
-    if (filter === 'paid') return l.isPaidSubscriber;
-    if (filter === 'free') return !l.isPaidSubscriber;
+    if (filter === 'active') return !l.isBlocked;
     if (filter === 'blocked') return l.isBlocked;
     return true;
   });
@@ -2055,12 +2106,11 @@ function renderLandlords() {
 
   table.innerHTML = list.map(l => {
     return `
-      <div class="bg-slate-800/90 border ${l.isBlocked ? 'border-red-900/80 bg-red-950/10' : 'border-slate-700/80'} rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div id="landlord-${l._id}" class="bg-slate-800/90 border ${l.isBlocked ? 'border-red-900/80 bg-red-950/10' : 'border-slate-700/80'} rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div class="space-y-1">
           <div class="flex items-center gap-2 flex-wrap">
             <span class="font-bold text-white text-base">${escapeHtml(l.fullName || 'Landlord')}</span>
-            ${l.isPaidSubscriber ? '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-paid font-semibold">★ Paid Subscriber</span>' : '<span class="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-700/60 text-slate-300">Free Tier</span>'}
-            ${l.isBlocked ? '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-rejected font-bold">Blocked</span>' : ''}
+            ${l.isBlocked ? '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-rejected font-bold">Blocked</span>' : '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-active font-semibold">Active</span>'}
             ${l.isPhoneVerified ? '<span class="text-[10px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-1.5 py-0.2 rounded">✓ Phone Verified</span>' : ''}
           </div>
           <div class="text-xs text-slate-400 flex items-center gap-3">
@@ -2071,13 +2121,6 @@ function renderLandlords() {
         </div>
 
         <div class="flex items-center gap-2 flex-wrap">
-          <button 
-            onclick="toggleLandlordPaid('${l._id}', ${l.isPaidSubscriber ? 'false' : 'true'})" 
-            class="text-xs font-semibold px-3 py-1.5 rounded-xl ${l.isPaidSubscriber ? 'bg-slate-700 hover:bg-slate-600 text-slate-200' : 'bg-blue-600 hover:bg-blue-500 text-white'} transition cursor-pointer shadow-sm"
-          >
-            ${l.isPaidSubscriber ? 'Revoke Paid' : '★ Set as Paid'}
-          </button>
-          
           <button 
             onclick="toggleLandlordBlock('${l._id}', ${l.isBlocked ? 'false' : 'true'})" 
             class="text-xs font-semibold px-3 py-1.5 rounded-xl ${l.isBlocked ? 'bg-emerald-600 hover:bg-emerald-500 text-white' : 'bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800/40'} transition cursor-pointer"
@@ -2090,35 +2133,32 @@ function renderLandlords() {
   }).join('');
 }
 
-async function toggleLandlordPaid(id, isPaidSubscriber) {
-  try {
-    const res = await adminFetch(`/api/admin/landlords/${id}/paid`, {
-      method: 'PUT',
-      body: JSON.stringify({ isPaidSubscriber })
-    });
-    if (res.ok) {
-      showToast(isPaidSubscriber ? 'Landlord upgraded to Paid Subscriber' : 'Landlord set to Free tier', 'success');
-      loadLandlords();
-      loadStats();
-    }
-  } catch (err) {
-    showToast('Failed to update landlord subscription', 'error');
-  }
-}
-
 async function toggleLandlordBlock(id, isBlocked) {
   try {
+    // Immediate state update in UI
+    const idx = landlordsCache.findIndex(l => String(l._id) === String(id));
+    if (idx !== -1) {
+      landlordsCache[idx].isBlocked = isBlocked;
+      renderLandlords();
+    }
+
     const res = await adminFetch(`/api/admin/landlords/${id}/block`, {
       method: 'PUT',
       body: JSON.stringify({ isBlocked })
     });
     if (res.ok) {
       showToast(isBlocked ? 'Landlord has been blocked' : 'Landlord has been unblocked', 'info');
-      loadLandlords();
       loadStats();
+    } else {
+      if (idx !== -1) {
+        landlordsCache[idx].isBlocked = !isBlocked;
+        renderLandlords();
+      }
+      showToast('Failed to update landlord block state', 'error');
     }
   } catch (err) {
     showToast('Failed to update landlord block state', 'error');
+    loadLandlords();
   }
 }
 
@@ -2178,11 +2218,10 @@ function renderRequests() {
 
     let statusBadge = '';
     if (r.status === 'active') statusBadge = '<span class="text-[11px] px-2.5 py-0.5 rounded-full badge-active font-semibold">Active Seeker</span>';
-    else if (r.status === 'found') statusBadge = '<span class="text-[11px] px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/30 font-semibold">Found Room</span>';
-    else statusBadge = `<span class="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300 font-semibold uppercase">${escapeHtml(r.status)}</span>`;
+    else statusBadge = `<span class="text-[11px] px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300 font-semibold uppercase">${escapeHtml(r.status || 'Active')}</span>`;
 
     return `
-      <div class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div id="room-request-${r._id}" class="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div class="space-y-1.5 flex-1 min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
             ${statusBadge}
@@ -2211,16 +2250,6 @@ function renderRequests() {
         </div>
 
         <div class="flex items-center gap-2 flex-wrap self-start md:self-center">
-          ${r.status !== 'found' ? `
-            <button onclick="updateRequestStatus('${r._id}', 'found')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-blue-600/80 hover:bg-blue-500 text-white transition cursor-pointer">
-              Mark Found
-            </button>
-          ` : `
-            <button onclick="updateRequestStatus('${r._id}', 'active')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition cursor-pointer">
-              Reactivate
-            </button>
-          `}
-          
           <button onclick="deleteRequestItem('${r._id}')" class="text-xs font-semibold px-3 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800/40 transition cursor-pointer">
             Delete
           </button>
@@ -2237,7 +2266,7 @@ async function updateRequestStatus(id, status) {
       body: JSON.stringify({ status })
     });
     if (res.ok) {
-      showToast(`Request marked as ${status}`, 'success');
+      showToast(`Request status updated`, 'success');
       loadRequests();
       loadStats();
     }
@@ -2248,15 +2277,30 @@ async function updateRequestStatus(id, status) {
 
 async function deleteRequestItem(id) {
   if (!confirm('Are you sure you want to remove this seeker request?')) return;
+  // Immediately remove from view using state management
+  const previousCache = [...requestsCache];
+  requestsCache = requestsCache.filter(r => String(r._id) !== String(id));
+  const badge = document.getElementById('badge-requests-count');
+  if (badge) badge.innerText = requestsCache.length;
+  renderRequests();
+
   try {
     const res = await adminFetch(`/api/admin/room-requests/${id}`, { method: 'DELETE' });
     if (res.ok) {
-      showToast('Room request removed', 'info');
-      loadRequests();
+      showToast('Room request removed successfully', 'info');
       loadStats();
+    } else {
+      // Rollback on failure
+      requestsCache = previousCache;
+      if (badge) badge.innerText = requestsCache.length;
+      renderRequests();
+      showToast('Failed to delete room request from server', 'error');
     }
   } catch (err) {
-    showToast('Failed to delete room request', 'error');
+    requestsCache = previousCache;
+    if (badge) badge.innerText = requestsCache.length;
+    renderRequests();
+    showToast('Failed to delete room request from server', 'error');
   }
 }
 
@@ -2371,7 +2415,7 @@ function renderAuditLogs() {
     const method = log.details?.method || '';
     const path = log.details?.path || '';
     const duration = log.details?.responseTimeMs ? `${log.details.responseTimeMs}ms` : '';
-    const actor = log.actorEmail || log.details?.actorEmail || log.details?.adminName || log.userRole || '12rakosadavid@gmail.com';
+    const actor = log.actorEmail || log.details?.actorEmail || log.details?.adminName || log.userRole || 'System Admin';
     const entity = log.resource || log.entityType || 'Listing';
     const entityId = log.resourceId || log.entityId || '';
     const title = log.entityTitle || log.details?.title || '';
@@ -2504,7 +2548,7 @@ function renderMessages() {
       <div class="p-12 text-center bg-slate-800/40 border border-slate-700/60 rounded-2xl">
         <div class="text-3xl mb-2">💬</div>
         <h4 class="text-sm font-bold text-white mb-1">No Inquiries Found</h4>
-        <p class="text-xs text-slate-400">Tenants who use 'Chat with Landlord' will appear here in real-time.</p>
+        <p class="text-xs text-slate-400">Tenant inquiries and messages will appear here in real-time.</p>
       </div>
     `;
     return;

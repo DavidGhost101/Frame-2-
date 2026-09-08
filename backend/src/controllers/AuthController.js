@@ -167,7 +167,7 @@ class AuthController {
         maxAge: 24 * 60 * 60 * 1000
       });
 
-      const adminEmail = (result.user && result.user.email) || username || '12rakosadavid@gmail.com';
+      const adminEmail = (result.user && result.user.email) || username || process.env.ADMIN_EMAIL || 'admin@rentaroom.co.za';
       await auditLogRepository.logAction({
         actorEmail: adminEmail,
         actorRole: 'ADMIN',

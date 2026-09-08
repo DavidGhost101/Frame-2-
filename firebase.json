@@ -1,0 +1,12 @@
+{
+  "firestore": [
+    {
+      "database": "(default)",
+      "rules": "firestore.rules"
+    },
+    {
+      "database": "ai-studio-rentaroom-34dcb20c-9e23-4c96-8c33-fbf09aa98cd0",
+      "rules": "firestore.rules"
+    }
+  ]
+}

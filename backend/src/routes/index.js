@@ -10,6 +10,7 @@ const reportRoutes = require('./reportRoutes');
 const notificationRoutes = require('./notificationRoutes');
 const aiRoutes = require('./aiRoutes');
 const docsRoutes = require('./docsRoutes');
+const uploadRoutes = require('./uploadRoutes');
 
 router.use('/auth', authRoutes);
 router.use('/listings', listingRoutes);
@@ -20,5 +21,6 @@ router.use('/reports', reportRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/ai', aiRoutes);
 router.use('/docs', docsRoutes);
+router.use('/upload', uploadRoutes);
 
 module.exports = router;

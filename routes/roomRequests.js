@@ -246,24 +246,23 @@ router.post('/:id/contact', async (req, res) => {
   }
 });
 
-// MARK as found / close request
-router.post('/:id/found', async (req, res) => {
+// DELETE request
+router.delete('/:id', async (req, res) => {
   try {
-    let request = null;
     if (mongoose.connection.readyState === 1) {
-      request = await RoomRequest.findById(req.params.id);
+      await RoomRequest.findByIdAndDelete(req.params.id);
     }
-    if (!request) {
-      request = fallbackStore.fallbackRequests.find(r => String(r._id) === String(req.params.id));
-    }
-    if (!request) return res.status(404).json({ error: 'Room request not found.' });
+    const idx = fallbackStore.fallbackRequests.findIndex(r => String(r._id) === String(req.params.id));
+    if (idx > -1) fallbackStore.fallbackRequests.splice(idx, 1);
 
-    request.status = 'found';
-    if (request.save) await request.save();
+    try {
+      const appEvents = require('../backend/src/events/eventEmitter');
+      appEvents.emit('request:deleted', { requestId: req.params.id });
+    } catch (_) {}
 
-    res.json({ success: true, message: 'Room request marked as resolved.' });
+    res.json({ success: true, message: 'Room request removed.' });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update status.' });
+    res.status(500).json({ error: 'Failed to remove room request.' });
   }
 });
 

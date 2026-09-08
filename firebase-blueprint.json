@@ -1,0 +1,65 @@
+{
+  "entities": {
+    "Listing": {
+      "title": "Listing",
+      "description": "A rental room or backroom listing in Soweto",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Title of the listing" },
+        "suburb": { "type": "string", "description": "Suburb name in Soweto" },
+        "address": { "type": "string", "description": "Physical street address or landmark" },
+        "monthlyRent": { "type": "number", "description": "Monthly rent in ZAR" },
+        "propertyType": { "type": "string", "description": "Type of property e.g. Backroom, Ensuite, Studio" },
+        "status": { "type": "string", "description": "Status e.g. active, pending_review, archived" },
+        "publicationStatus": { "type": "string", "description": "PUBLISHED or PENDING" },
+        "phone": { "type": "string", "description": "Contact phone number" },
+        "landlordFullName": { "type": "string", "description": "Full name of the landlord" },
+        "image": { "type": "string", "description": "URL of the room photo" },
+        "nearbyInstitution": { "type": "string", "description": "Nearby landmark or campus" },
+        "amenities": { "type": "array", "description": "List of available amenities" }
+      },
+      "required": ["title", "suburb", "monthlyRent", "propertyType"]
+    },
+    "RoomRequest": {
+      "title": "RoomRequest",
+      "description": "A seeker request looking for a room to rent",
+      "type": "object",
+      "properties": {
+        "seekerName": { "type": "string", "description": "Name of room seeker" },
+        "phone": { "type": "string", "description": "Phone number" },
+        "suburb": { "type": "string", "description": "Desired suburb" },
+        "maxBudget": { "type": "number", "description": "Maximum budget in ZAR" },
+        "roomType": { "type": "string", "description": "Preferred room type" },
+        "occupation": { "type": "string", "description": "Seeker occupation or profile" },
+        "status": { "type": "string", "description": "Request status: active or archived" }
+      },
+      "required": ["seekerName", "phone", "suburb", "maxBudget"]
+    },
+    "Landlord": {
+      "title": "Landlord",
+      "description": "A registered landlord profile",
+      "type": "object",
+      "properties": {
+        "fullName": { "type": "string", "description": "Full name" },
+        "phone": { "type": "string", "description": "Mobile phone" },
+        "isPhoneVerified": { "type": "boolean", "description": "Whether OTP was verified" },
+        "isBlocked": { "type": "boolean", "description": "Whether landlord is blocked" }
+      },
+      "required": ["fullName", "phone"]
+    }
+  },
+  "firestore": {
+    "/listings/{listingId}": {
+      "schema": "Listing",
+      "description": "Collection of room listings"
+    },
+    "/room_requests/{requestId}": {
+      "schema": "RoomRequest",
+      "description": "Collection of room seeker requests"
+    },
+    "/landlords/{landlordId}": {
+      "schema": "Landlord",
+      "description": "Collection of landlords"
+    }
+  }
+}

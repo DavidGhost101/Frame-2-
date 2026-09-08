@@ -8,6 +8,9 @@ class ListingRepository extends BaseRepository {
   }
 
   async findWithPopulatedLandlord(filter = {}, pagination = {}, projection = null) {
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error('Database not connected, switching to fallbackStore');
+    }
     const { skip = 0, limit = 20, sort = { createdAt: -1 } } = pagination;
     const queryFilter = { isDeleted: { $ne: true }, ...filter };
 

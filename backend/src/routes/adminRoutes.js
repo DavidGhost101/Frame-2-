@@ -223,8 +223,13 @@ router.get('/listings', async (req, res, next) => {
     const isFlagged = req.query.flagged === 'true';
     const status = req.query.status || 'all';
     const keyword = req.query.keyword || '';
-    const sortBy = req.query.sortBy || 'createdAt';
-    const order = req.query.order || 'desc';
+    let sortBy = req.query.sortBy || 'createdAt';
+    let order = req.query.order || 'desc';
+    // Enforce newest-first query order (createdAt: -1) when fetching pending listings
+    if (status === 'pending' || status === 'pending_review' || status === 'PENDING' || status === 'PENDING_REVIEW') {
+      sortBy = 'createdAt';
+      order = 'desc';
+    }
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(200, Number(req.query.limit) || 100);
 
@@ -347,6 +352,7 @@ router.put('/landlords/:id', async (req, res, next) => {
 
 router.put('/landlords/:id/paid', adminController.setLandlordPaid);
 router.put('/landlords/:id/block', adminController.setLandlordBlocked);
+router.post('/landlords/:id/block', adminController.setLandlordBlocked);
 
 router.delete('/landlords/:id', async (req, res, next) => {
   try {
@@ -395,6 +401,26 @@ router.put('/users/:id/status', async (req, res, next) => {
     const { status } = req.body;
     const user = await userService.updateUserStatus(req.params.id, status, req.user);
     return ApiResponse.success(res, 'User status updated successfully', user, 200, { user });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/users/:id/block', async (req, res, next) => {
+  try {
+    const isBlocked = req.body.isBlocked !== undefined ? Boolean(req.body.isBlocked) : (req.body.status ? req.body.status === 'blocked' : true);
+    const user = await userService.setUserBlocked(req.params.id, isBlocked, req.user);
+    return ApiResponse.success(res, `User account ${isBlocked ? 'blocked' : 'unblocked'} successfully`, user, 200, { user });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/users/:id/block', async (req, res, next) => {
+  try {
+    const isBlocked = req.body.isBlocked !== undefined ? Boolean(req.body.isBlocked) : (req.body.status ? req.body.status === 'blocked' : true);
+    const user = await userService.setUserBlocked(req.params.id, isBlocked, req.user);
+    return ApiResponse.success(res, `User account ${isBlocked ? 'blocked' : 'unblocked'} successfully`, user, 200, { user });
   } catch (err) {
     next(err);
   }

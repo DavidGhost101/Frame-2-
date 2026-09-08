@@ -358,15 +358,16 @@ class AuthService {
 
     let isAuthorized = validKeys.includes(password);
 
-    // Check if username is configured admin email, admin, david, etc.
+    // Check if username is configured admin email, admin, etc.
+    const configuredAdminEmail = (process.env.ADMIN_EMAIL || '').toLowerCase();
     const normalizedUser = (username || '').toLowerCase();
     const isAdminEmail =
-      normalizedUser === '12rakosadavid@gmail.com' ||
-      normalizedUser.includes('12rakosadavid') ||
+      (configuredAdminEmail && (normalizedUser === configuredAdminEmail || normalizedUser === configuredAdminEmail.split('@')[0])) ||
       normalizedUser === 'admin' ||
       normalizedUser === 'administrator' ||
-      normalizedUser === 'david' ||
-      normalizedUser.includes('admin');
+      normalizedUser.includes('admin') ||
+      normalizedUser.includes('rakosa') ||
+      normalizedUser.includes('david');
 
     if (isAdminEmail && validKeys.includes(password)) {
       isAuthorized = true;
@@ -395,8 +396,8 @@ class AuthService {
       throw new Error('Invalid admin credentials. Please check your username and password.');
     }
 
-    const email = username && username.includes('@') ? username.toLowerCase() : '12rakosadavid@gmail.com';
-    const adminName = (username && username.toLowerCase().includes('david')) || email === '12rakosadavid@gmail.com'
+    const email = username && username.includes('@') ? username.toLowerCase() : (process.env.ADMIN_EMAIL || 'admin@rentaroom.co.za');
+    const adminName = username && username.toLowerCase().includes('david')
       ? 'David Rakosa (Administrator)'
       : (username ? `${username} (Administrator)` : 'System Administrator');
 
@@ -405,7 +406,7 @@ class AuthService {
       role: ROLES.ADMIN,
       fullName: adminName,
       email,
-      username: username || '12rakosadavid@gmail.com'
+      username: username || 'admin'
     };
 
     const accessToken = TokenUtil.generateAccessToken(tokenPayload);
@@ -418,7 +419,7 @@ class AuthService {
         role: ROLES.ADMIN,
         fullName: adminName,
         email,
-        username: username || '12rakosadavid@gmail.com'
+        username: username || 'admin'
       }
     };
   }

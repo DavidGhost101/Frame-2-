@@ -190,15 +190,50 @@ router.patch('/landlords/:id', requireAdmin, asyncHandler(async (req, res) => {
   if (typeof isBlocked === 'boolean') updates.isBlocked = isBlocked;
   if (typeof isPaidSubscriber === 'boolean') updates.isPaidSubscriber = isPaidSubscriber;
 
+  const appEvents = require('../backend/src/events/eventEmitter');
+  const User = require('../backend/src/models/User');
+
   if (mongoose.connection.readyState === 1) {
     const landlord = await Landlord.findByIdAndUpdate(req.params.id, updates, { new: true });
     if (!landlord) return res.status(404).json({ error: 'Landlord not found.' });
+
+    if (typeof isBlocked === 'boolean') {
+      try {
+        await User.findOneAndUpdate(
+          { $or: [{ phone: landlord.phone }, { _id: landlord.userId }] },
+          { status: isBlocked ? 'blocked' : 'active' }
+        );
+      } catch (_) {}
+    }
+
+    try {
+      appEvents.emit('landlord:updated', {
+        landlord,
+        landlordId: String(landlord._id),
+        isBlocked: landlord.isBlocked
+      });
+    } catch (_) {}
+
     return res.json({ success: true, landlord });
   }
 
   const landlord = fallbackStore.getLandlordById(req.params.id);
   if (!landlord) return res.status(404).json({ error: 'Landlord not found.' });
   Object.assign(landlord, updates);
+
+  if (typeof isBlocked === 'boolean' && fallbackStore.fallbackUsers) {
+    const fbU = fallbackStore.fallbackUsers.find(u => (landlord.phone && u.phone === landlord.phone) || (landlord.userId && String(u._id) === String(landlord.userId)));
+    if (fbU) fbU.status = isBlocked ? 'blocked' : 'active';
+  }
+
+  try {
+    appEvents.emit('landlord:updated', {
+      landlord,
+      landlordId: String(landlord._id),
+      isBlocked: landlord.isBlocked
+    });
+  } catch (_) {}
+
   res.json({ success: true, landlord });
 }));
 
@@ -276,13 +311,21 @@ router.get('/room-requests', requireAdmin, asyncHandler(async (req, res) => {
 
 // DELETE a room request
 router.delete('/room-requests/:id', requireAdmin, asyncHandler(async (req, res) => {
+  const appEvents = require('../backend/src/events/eventEmitter');
+
   if (mongoose.connection.readyState === 1) {
     await RoomRequest.findByIdAndDelete(req.params.id);
+    try {
+      appEvents.emit('request:deleted', { requestId: req.params.id });
+    } catch (_) {}
     return res.json({ success: true, message: 'Room request removed.' });
   }
 
   const idx = fallbackStore.fallbackRequests.findIndex(r => String(r._id) === String(req.params.id));
   if (idx > -1) fallbackStore.fallbackRequests.splice(idx, 1);
+  try {
+    appEvents.emit('request:deleted', { requestId: req.params.id });
+  } catch (_) {}
   res.json({ success: true, message: 'Room request removed.' });
 }));
 

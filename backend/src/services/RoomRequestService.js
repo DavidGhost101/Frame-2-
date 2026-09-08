@@ -231,11 +231,7 @@ class RoomRequestService {
     let deleted = null;
     try {
       if (mongoose.Types.ObjectId.isValid(id)) {
-        deleted = await roomRequestRepository.updateById(id, {
-          isDeleted: true,
-          status: 'archived',
-          deletedAt: new Date()
-        });
+        deleted = await roomRequestRepository.deleteById(id);
       }
     } catch (err) {
       console.warn('DB deleteRoomRequest warning:', err.message);

@@ -52,6 +52,29 @@
   .custom-scrollbar::-webkit-scrollbar { width: 6px; }
   .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
   .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  
+  /* Loading Skeleton Shimmer Animations */
+  @keyframes skeletonShimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .skeleton-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+    animation: skeletonShimmer 1.6s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-shimmer::after {
+      animation: none;
+    }
+  }
 </style>
 </head>
 <body class="antialiased min-h-screen flex flex-col justify-between bg-slate-50 text-slate-900 selection:bg-rose-500 selection:text-white pb-20 sm:pb-0">
@@ -160,52 +183,128 @@
         <button onclick="setSuburbPill('Protea Glen')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer">Protea Glen</button>
         <button onclick="setSuburbPill('Meadowlands')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer">Meadowlands</button>
         <button onclick="setSuburbPill('Jabulani')" class="suburb-pill bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer">Jabulani</button>
-        <button id="wifiQuickPill" onclick="toggleWifiQuickFilter()" class="suburb-pill bg-white text-brand-700 hover:bg-brand-50 border border-brand-200 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs">
-          <span>📶</span> <span>WiFi Included</span>
-        </button>
       </div>
     </div>
 
     <!-- FILTER BAR FOR ROOM LISTINGS -->
-    <div id="listingsFilterBar" class="mt-4 bg-white p-4 sm:p-5 rounded-2xl shadow-lg border border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-left">
-      <div>
-        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Search Suburb / Area</label>
-        <input id="suburbFilter" type="text" placeholder="e.g. Dobsonville or UJ" oninput="debouncedLoadListings()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none" />
+    <div id="listingsFilterBar" class="mt-4 bg-white p-4 sm:p-5 rounded-2xl shadow-lg border border-slate-200 text-left space-y-3.5">
+      <!-- TOP ROW: Keyword Search & Suburb / Area Search -->
+      <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
+        <!-- Keyword Search (Amenities, Landmarks, Building Types) -->
+        <div class="md:col-span-7">
+          <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center justify-between">
+            <span class="flex items-center gap-1 font-bold">🔍 Search Amenities, Landmarks & Buildings</span>
+            <span class="text-[10px] text-brand-600 font-semibold lowercase hidden sm:inline">e.g. WiFi, Ensuite, UJ, Bara, Parking</span>
+          </label>
+          <div class="relative flex items-center">
+            <input 
+              id="keywordFilter" 
+              type="text" 
+              placeholder="Search amenities, landmarks, building types (e.g. WiFi, Ensuite, UJ, Bara)..." 
+              oninput="onKeywordInput()" 
+              onkeydown="if(event.key==='Enter'){event.preventDefault();submitListingsSearch();}"
+              class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl pl-9 pr-9 p-2.5 focus:ring-2 focus:ring-brand-500 outline-none transition" 
+            />
+            <span class="absolute left-3 text-slate-400 pointer-events-none text-sm">🔎</span>
+            <button 
+              id="clearKeywordBtn" 
+              type="button" 
+              onclick="clearKeywordFilter()" 
+              class="hidden absolute right-2.5 text-slate-400 hover:text-slate-700 text-xs w-6 h-6 flex items-center justify-center rounded-full hover:bg-slate-200 transition cursor-pointer" 
+              title="Clear search"
+            >✕</button>
+          </div>
+        </div>
+
+        <!-- Suburb / Area Search -->
+        <div class="md:col-span-5">
+          <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Search Suburb / Area</label>
+          <input 
+            id="suburbFilter" 
+            type="text" 
+            placeholder="e.g. Dobsonville or Protea Glen" 
+            oninput="debouncedLoadListings()" 
+            onkeydown="if(event.key==='Enter'){event.preventDefault();submitListingsSearch();}"
+            class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none transition" 
+          />
+        </div>
       </div>
-      <div>
-        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Max Rent (ZAR)</label>
-        <select id="priceFilter" onchange="loadListings()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
-          <option value="">Any Monthly Rent</option>
-          <option value="1600">Under R1,600</option>
-          <option value="2000">Under R2,000</option>
-          <option value="2500">Under R2,500</option>
-          <option value="3000">Under R3,000</option>
-          <option value="4000">Under R4,000</option>
-        </select>
-      </div>
-      <div>
-        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Room Category</label>
-        <select id="typeFilter" onchange="loadListings()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
-          <option value="All">All Categories</option>
-          <option value="Ensuite">Ensuite / Private Shower</option>
-          <option value="Backroom">Standard Backroom</option>
-          <option value="Garage">Garage Conversion</option>
-          <option value="Flatlet">Flatlet / Cottage</option>
-          <option value="Student Accommodation">Student Accommodation</option>
-          <option value="Apartment">1-Bed Apartment</option>
-        </select>
-      </div>
-      <div>
-        <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">WiFi / Internet</label>
-        <select id="wifiFilter" onchange="onWifiFilterChange()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
-          <option value="">All Rooms</option>
-          <option value="wifi">📶 WiFi Included</option>
-        </select>
-      </div>
-      <div class="flex items-end gap-2">
-        <button onclick="resetListingFilters()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm py-2.5 px-4 rounded-xl transition shadow-xs cursor-pointer">
-          Reset Filters
+
+      <!-- POPULAR KEYWORD QUICK-TAGS (Amenities, Landmarks, Types) -->
+      <div class="flex items-center gap-1.5 flex-wrap pt-0.5 border-t border-slate-100 text-xs">
+        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">Quick Search:</span>
+        <button type="button" onclick="applyKeywordFilter('WiFi')" class="keyword-chip text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 transition border border-slate-200/70 flex items-center gap-1 cursor-pointer">
+          📶 WiFi
         </button>
+        <button type="button" onclick="applyKeywordFilter('Ensuite')" class="keyword-chip text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 transition border border-slate-200/70 flex items-center gap-1 cursor-pointer">
+          🚿 Ensuite
+        </button>
+        <button type="button" onclick="applyKeywordFilter('UJ')" class="keyword-chip text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 transition border border-slate-200/70 flex items-center gap-1 cursor-pointer">
+          🎓 UJ Soweto
+        </button>
+        <button type="button" onclick="applyKeywordFilter('Bara')" class="keyword-chip text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 transition border border-slate-200/70 flex items-center gap-1 cursor-pointer">
+          🏥 Bara Hospital
+        </button>
+        <button type="button" onclick="applyKeywordFilter('Prepaid Electricity')" class="keyword-chip text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 transition border border-slate-200/70 flex items-center gap-1 cursor-pointer">
+          ⚡ Prepaid Meter
+        </button>
+        <button type="button" onclick="applyKeywordFilter('Parking')" class="keyword-chip text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 transition border border-slate-200/70 flex items-center gap-1 cursor-pointer">
+          🚗 Parking
+        </button>
+        <button type="button" onclick="applyKeywordFilter('Flatlet')" class="keyword-chip text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 transition border border-slate-200/70 flex items-center gap-1 cursor-pointer">
+          🏡 Flatlet / Cottage
+        </button>
+      </div>
+
+      <!-- BOTTOM ROW: Rent, Category, WiFi, Sort By Dropdown, Reset & Search -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-1">
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Max Rent (ZAR)</label>
+          <select id="priceFilter" onchange="loadListings()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
+            <option value="">Any Monthly Rent</option>
+            <option value="1600">Under R1,600</option>
+            <option value="2000">Under R2,000</option>
+            <option value="2500">Under R2,500</option>
+            <option value="3000">Under R3,000</option>
+            <option value="4000">Under R4,000</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Room Category</label>
+          <select id="typeFilter" onchange="loadListings()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
+            <option value="All">All Categories</option>
+            <option value="Ensuite">Ensuite / Private Shower</option>
+            <option value="Backroom">Standard Backroom</option>
+            <option value="Garage">Garage Conversion</option>
+            <option value="Flatlet">Flatlet / Cottage</option>
+            <option value="Student Accommodation">Student Accommodation</option>
+            <option value="Apartment">1-Bed Apartment</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">WiFi / Internet</label>
+          <select id="wifiFilter" onchange="onWifiFilterChange()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none">
+            <option value="">All Rooms</option>
+            <option value="wifi">📶 WiFi Included</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Sort Rooms By</label>
+          <select id="sortFilterSelect" onchange="onSortChange(this.value)" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-brand-500 outline-none font-semibold">
+            <option value="newest">✨ Newest First</option>
+            <option value="price_asc">💰 Price: Low to High</option>
+            <option value="price_desc">💎 Price: High to Low</option>
+          </select>
+        </div>
+        <div class="flex items-end gap-2">
+          <button id="searchRoomsSubmitBtn" onclick="submitListingsSearch()" class="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm py-2.5 px-3 rounded-xl transition shadow-xs cursor-pointer flex items-center justify-center gap-1.5 active:scale-95" title="Search rooms with applied filters">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <span>Search</span>
+          </button>
+          <button id="resetListingFiltersBtn" onclick="resetListingFilters()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm py-2.5 px-3 rounded-xl transition shadow-xs cursor-pointer flex items-center justify-center gap-1" title="Reset all filters">
+            <span>↺</span> <span class="hidden sm:inline">Reset</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -213,7 +312,7 @@
     <div id="seekersFilterBar" class="hidden mt-4 bg-white p-4 sm:p-5 rounded-2xl shadow-lg border border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-3 text-left">
       <div>
         <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Desired Area</label>
-        <input id="seekerSuburbFilter" type="text" placeholder="e.g. Pimville" oninput="debouncedLoadSeekers()" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none" />
+        <input id="seekerSuburbFilter" type="text" placeholder="e.g. Pimville" oninput="debouncedLoadSeekers()" onkeydown="if(event.key==='Enter'){event.preventDefault();submitSeekersSearch();}" class="w-full bg-slate-50 border border-slate-200 text-slate-800 text-sm rounded-xl p-2.5 focus:ring-2 focus:ring-emerald-500 outline-none" />
       </div>
       <div>
         <label class="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tenant Budget</label>
@@ -237,8 +336,12 @@
         </select>
       </div>
       <div class="flex items-end gap-2">
-        <button onclick="resetSeekerFilters()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm py-2.5 px-4 rounded-xl transition shadow-xs">
-          Reset
+        <button id="searchSeekersSubmitBtn" onclick="submitSeekersSearch()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm py-2.5 px-3 rounded-xl transition shadow-xs cursor-pointer flex items-center justify-center gap-1.5 active:scale-95" title="Search room requests">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+          <span>Search</span>
+        </button>
+        <button id="resetSeekerFiltersBtn" onclick="resetSeekerFilters()" class="bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm py-2.5 px-3 rounded-xl transition shadow-xs cursor-pointer flex items-center justify-center gap-1" title="Reset seeker filters">
+          <span>↺</span> <span class="hidden sm:inline">Reset</span>
         </button>
       </div>
     </div>
@@ -284,7 +387,16 @@
         <h2 class="text-2xl font-black text-slate-900 font-heading tracking-tight">Available Rooms to Rent in Soweto</h2>
         <p class="text-xs text-slate-500 font-medium">Browse verified rooms, backrooms, student pads, and flatlets</p>
       </div>
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2.5 flex-wrap">
+        <!-- Sorting dropdown directly in listings header -->
+        <div class="flex items-center gap-1.5 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+          <label for="sortBySelect" class="text-[11px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Sort:</label>
+          <select id="sortBySelect" onchange="onSortChange(this.value)" class="text-xs font-bold text-slate-700 bg-transparent outline-none cursor-pointer">
+            <option value="newest">✨ Newest First</option>
+            <option value="price_asc">💰 Price: Low to High</option>
+            <option value="price_desc">💎 Price: High to Low</option>
+          </select>
+        </div>
         <span id="roomCount" class="text-xs sm:text-sm font-bold text-slate-600 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">Loading listings...</span>
         <button onclick="toggleFavoritesView()" id="filterOnlySavedBtn" class="text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1">
           <span>❤️ View Saved</span>
@@ -610,12 +722,8 @@
 
       <!-- Action & Close Buttons -->
       <div class="pt-3 flex flex-col gap-2.5 border-t border-slate-100">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          <button id="detailChatBtn" onclick="openChatWithLandlord(activeDetailListing ? activeDetailListing._id : null)" class="bg-rose-500 hover:bg-rose-600 text-white font-bold text-sm py-3 px-4 rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer">
-            <span>💬</span>
-            <span>Chat with Landlord</span>
-          </button>
-          <button id="detailWhatsappBtn" onclick="contactLandlordDirect()" class="bg-slate-900 hover:bg-emerald-600 text-white font-bold text-sm py-3 px-4 rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer">
+        <div>
+          <button id="detailWhatsappBtn" onclick="contactLandlordDirect()" class="w-full bg-slate-900 hover:bg-emerald-600 text-white font-bold text-sm py-3 px-4 rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer">
             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
             <span>Chat on WhatsApp</span>
           </button>
@@ -630,101 +738,6 @@
         </div>
       </div>
     </div>
-  </div>
-</div>
-
-<!-- MODAL: CHAT WITH LANDLORD (IN-PLATFORM MESSAGING) -->
-<div id="landlordChatModal" class="modal-backdrop fixed inset-0 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4 z-50 hidden" onclick="handleBackdropClick(event, 'landlordChatModal')">
-  <div class="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-100 flex flex-col max-h-[90vh] overflow-hidden relative" onclick="event.stopPropagation()">
-    <!-- Chat Header -->
-    <div class="p-4 sm:p-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-11 h-11 rounded-2xl bg-rose-500 text-white flex items-center justify-center font-black text-lg shadow-sm">
-          💬
-        </div>
-        <div>
-          <div class="flex items-center gap-1.5">
-            <h3 id="chatLandlordName" class="font-extrabold text-slate-900 text-base font-heading">Chat with Landlord</h3>
-            <span class="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full">✓ Verified</span>
-          </div>
-          <p id="chatListingSubtitle" class="text-xs text-slate-500 font-medium line-clamp-1">Direct in-platform inquiry</p>
-        </div>
-      </div>
-      <div class="flex items-center gap-1.5">
-        <button onclick="contactLandlordDirect()" title="Switch to WhatsApp" class="p-2 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold transition flex items-center gap-1 cursor-pointer">
-          <span>📱</span>
-          <span class="hidden sm:inline">WhatsApp</span>
-        </button>
-        <button onclick="toggleModal('landlordChatModal')" class="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-sm transition cursor-pointer">
-          ✕
-        </button>
-      </div>
-    </div>
-
-    <!-- Safety Warning Reminder in Chat -->
-    <div class="px-4 py-2 bg-amber-50 border-b border-amber-100 text-[11px] text-amber-900 flex items-center gap-1.5">
-      <span>🛡️</span>
-      <span><strong>Safety Reminder:</strong> Never send deposit before physically inspecting the room.</span>
-    </div>
-
-    <!-- Quick Inquiry Chips -->
-    <div class="px-4 py-2.5 bg-slate-50/70 border-b border-slate-100 overflow-x-auto flex items-center gap-2 text-xs no-scrollbar">
-      <span class="text-slate-400 font-semibold text-[10px] uppercase shrink-0">Suggestions:</span>
-      <button type="button" onclick="insertQuickMessage('Is this room still available?')" class="px-3 py-1 rounded-full bg-white hover:bg-rose-50 border border-slate-200 text-slate-700 hover:text-rose-600 hover:border-rose-200 text-[11px] font-medium shrink-0 transition cursor-pointer">
-        Is it available?
-      </button>
-      <button type="button" onclick="insertQuickMessage('When can I arrange an in-person viewing?')" class="px-3 py-1 rounded-full bg-white hover:bg-rose-50 border border-slate-200 text-slate-700 hover:text-rose-600 hover:border-rose-200 text-[11px] font-medium shrink-0 transition cursor-pointer">
-        Arrange viewing
-      </button>
-      <button type="button" onclick="insertQuickMessage('Is deposit required before move-in?')" class="px-3 py-1 rounded-full bg-white hover:bg-rose-50 border border-slate-200 text-slate-700 hover:text-rose-600 hover:border-rose-200 text-[11px] font-medium shrink-0 transition cursor-pointer">
-        Deposit details
-      </button>
-      <button type="button" onclick="insertQuickMessage('Is parking space available in the yard?')" class="px-3 py-1 rounded-full bg-white hover:bg-rose-50 border border-slate-200 text-slate-700 hover:text-rose-600 hover:border-rose-200 text-[11px] font-medium shrink-0 transition cursor-pointer">
-        Parking info
-      </button>
-    </div>
-
-    <!-- Chat Messages History Container -->
-    <div id="chatMessagesContainer" class="flex-1 p-4 sm:p-5 overflow-y-auto space-y-3.5 bg-slate-50/50 min-h-[260px] max-h-[380px]">
-      <div class="text-center py-6 text-slate-400 text-xs font-medium">
-        Loading conversation...
-      </div>
-    </div>
-
-    <!-- Chat Input Form -->
-    <form onsubmit="handleSendLandlordMessage(event)" class="p-3 sm:p-4 bg-white border-t border-slate-100 space-y-2.5">
-      <div class="flex items-center gap-2">
-        <input 
-          type="text" 
-          id="chatSenderName" 
-          placeholder="Your Name (e.g. Lerato)" 
-          class="w-1/3 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 outline-none focus:border-rose-500 focus:bg-white"
-        />
-        <input 
-          type="tel" 
-          id="chatSenderPhone" 
-          placeholder="Contact number (optional)" 
-          class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 outline-none focus:border-rose-500 focus:bg-white"
-        />
-      </div>
-      <div class="flex items-center gap-2">
-        <input 
-          type="text" 
-          id="chatMessageInput" 
-          required 
-          placeholder="Type your question or viewing inquiry..." 
-          class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-800 outline-none focus:border-rose-500 focus:bg-white"
-        />
-        <button 
-          type="submit" 
-          id="chatSubmitBtn" 
-          class="bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition shadow-xs flex items-center gap-1.5 cursor-pointer shrink-0"
-        >
-          <span>Send</span>
-          <span>➤</span>
-        </button>
-      </div>
-    </form>
   </div>
 </div>
 
@@ -1706,21 +1719,251 @@ function debouncedLoadSeekers() {
   seekerDebounceTimer = setTimeout(loadSeekers, 350);
 }
 
+// Helper to build a single listings skeleton card
+function createListingSkeletonHtml(i = 1) {
+  return `
+    <div id="listing-skeleton-${i}" class="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-xs flex flex-col justify-between select-none pointer-events-none" aria-hidden="true">
+      <div>
+        <!-- Skeleton Image Header -->
+        <div class="relative h-48 w-full bg-slate-200 skeleton-shimmer overflow-hidden">
+          <div class="absolute top-3 right-3 h-6 w-20 bg-slate-300/80 rounded-lg"></div>
+          <div class="absolute bottom-3 left-3 h-6 w-24 bg-slate-300/80 rounded-lg"></div>
+          <div class="absolute top-3 left-3 flex items-center gap-1.5">
+            <div class="w-8 h-8 rounded-full bg-white/70"></div>
+            <div class="w-8 h-8 rounded-full bg-white/70"></div>
+          </div>
+        </div>
+
+        <!-- Skeleton Card Info Body -->
+        <div class="p-5 space-y-2.5">
+          <!-- Listed Date & Verification Row -->
+          <div class="flex items-center justify-between pb-1.5 border-b border-slate-100">
+            <div class="h-3.5 w-32 bg-slate-200 rounded skeleton-shimmer"></div>
+            <div class="h-4 w-16 bg-slate-200 rounded-md skeleton-shimmer"></div>
+          </div>
+
+          <!-- Title placeholder -->
+          <div class="space-y-1.5 pt-0.5">
+            <div class="h-5 w-4/5 bg-slate-200 rounded skeleton-shimmer"></div>
+            <div class="h-3.5 w-2/5 bg-slate-100 rounded skeleton-shimmer"></div>
+          </div>
+
+          <!-- Rent price placeholder -->
+          <div class="flex items-baseline gap-2 pt-1">
+            <div class="h-7 w-28 bg-slate-200 rounded skeleton-shimmer"></div>
+            <div class="h-3.5 w-14 bg-slate-100 rounded skeleton-shimmer"></div>
+          </div>
+
+          <!-- Amenities badges placeholder -->
+          <div class="flex flex-wrap gap-1.5 pt-1">
+            <div class="h-6 w-20 bg-slate-100 rounded-lg border border-slate-200/60 skeleton-shimmer"></div>
+            <div class="h-6 w-16 bg-slate-100 rounded-lg border border-slate-200/60 skeleton-shimmer"></div>
+            <div class="h-6 w-24 bg-slate-100 rounded-lg border border-slate-200/60 skeleton-shimmer"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Skeleton Card Footer Actions -->
+      <div class="p-5 pt-0 space-y-2">
+        <div class="grid grid-cols-4 gap-1.5">
+          <div class="h-9 bg-slate-100 rounded-xl border border-slate-200/60 skeleton-shimmer"></div>
+          <div class="h-9 bg-slate-100 rounded-xl border border-slate-200/60 skeleton-shimmer"></div>
+          <div class="h-9 bg-slate-100 rounded-xl border border-slate-200/60 skeleton-shimmer"></div>
+          <div class="h-9 bg-slate-200 rounded-xl skeleton-shimmer"></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderListingsSkeleton(count = 6) {
+  const grid = document.getElementById('listingsGrid');
+  const countEl = document.getElementById('roomCount');
+  if (!grid) return;
+  if (countEl) countEl.innerText = 'Finding available rooms...';
+  grid.setAttribute('aria-busy', 'true');
+  grid.setAttribute('aria-label', 'Loading room listings');
+  grid.innerHTML = Array.from({ length: count }, (_, i) => createListingSkeletonHtml(i + 1)).join('');
+}
+
+function getSelectedListingSort() {
+  const topSort = document.getElementById('sortBySelect');
+  const barSort = document.getElementById('sortFilterSelect');
+  return (topSort && topSort.value) || (barSort && barSort.value) || 'newest';
+}
+
+function onSortChange(sortVal) {
+  const topSort = document.getElementById('sortBySelect');
+  const barSort = document.getElementById('sortFilterSelect');
+  if (topSort) topSort.value = sortVal;
+  if (barSort) barSort.value = sortVal;
+
+  if (loadedListingsCache && loadedListingsCache.length > 0) {
+    renderListingsGrid(loadedListingsCache);
+  }
+  loadListings();
+}
+
+function onKeywordInput() {
+  const input = document.getElementById('keywordFilter');
+  const clearBtn = document.getElementById('clearKeywordBtn');
+  const val = input ? input.value.trim() : '';
+  if (clearBtn) {
+    clearBtn.classList.toggle('hidden', !val);
+  }
+  highlightActiveKeywordChips(val);
+  if (loadedListingsCache && loadedListingsCache.length > 0) {
+    renderListingsGrid(loadedListingsCache);
+  }
+  debouncedLoadListings();
+}
+
+function clearKeywordFilter() {
+  const input = document.getElementById('keywordFilter');
+  if (input) input.value = '';
+  const clearBtn = document.getElementById('clearKeywordBtn');
+  if (clearBtn) clearBtn.classList.add('hidden');
+  highlightActiveKeywordChips('');
+  if (loadedListingsCache && loadedListingsCache.length > 0) {
+    renderListingsGrid(loadedListingsCache);
+  }
+  loadListings();
+}
+
+function applyKeywordFilter(term) {
+  const input = document.getElementById('keywordFilter');
+  if (!input) return;
+  const currentVal = input.value.trim().toLowerCase();
+  const targetVal = term.toLowerCase();
+
+  if (currentVal === targetVal) {
+    input.value = '';
+  } else {
+    input.value = term;
+  }
+  const clearBtn = document.getElementById('clearKeywordBtn');
+  if (clearBtn) clearBtn.classList.toggle('hidden', !input.value.trim());
+
+  highlightActiveKeywordChips(input.value.trim());
+  if (loadedListingsCache && loadedListingsCache.length > 0) {
+    renderListingsGrid(loadedListingsCache);
+  }
+  debouncedLoadListings();
+}
+
+function highlightActiveKeywordChips(activeText) {
+  const activeLower = (activeText || '').toLowerCase();
+  document.querySelectorAll('.keyword-chip').forEach(chip => {
+    const text = chip.innerText.toLowerCase();
+    const isMatch = activeLower && (text.includes(activeLower) || activeLower.includes(text.replace(/[^a-z0-9]/g, '')));
+    if (isMatch) {
+      chip.className = 'keyword-chip text-[11px] font-bold px-2.5 py-1 rounded-lg bg-brand-600 text-white transition border border-brand-700 flex items-center gap-1 cursor-pointer shadow-2xs';
+    } else {
+      chip.className = 'keyword-chip text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-brand-50 hover:text-brand-700 text-slate-700 transition border border-slate-200/70 flex items-center gap-1 cursor-pointer';
+    }
+  });
+}
+
+function updateActiveFilterBadges() {
+  const container = document.getElementById('filterTagContainer');
+  const wrapper = document.getElementById('activeFilterTags');
+  if (!container || !wrapper) return;
+
+  const tags = [];
+
+  const kwInput = document.getElementById('keywordFilter');
+  const kwVal = kwInput ? kwInput.value.trim() : '';
+  if (kwVal) {
+    tags.push({
+      label: `🔍 "${kwVal}"`,
+      onRemove: 'clearKeywordFilter()'
+    });
+  }
+
+  const suburbInput = document.getElementById('suburbFilter');
+  const suburbVal = suburbInput ? suburbInput.value.trim() : '';
+  if (suburbVal) {
+    tags.push({
+      label: `📍 ${suburbVal}`,
+      onRemove: `document.getElementById('suburbFilter').value=''; loadListings();`
+    });
+  }
+
+  const priceSelect = document.getElementById('priceFilter');
+  if (priceSelect && priceSelect.value) {
+    const txt = priceSelect.options[priceSelect.selectedIndex]?.text || `Under R${priceSelect.value}`;
+    tags.push({
+      label: `💰 ${txt}`,
+      onRemove: `document.getElementById('priceFilter').value=''; loadListings();`
+    });
+  }
+
+  const typeSelect = document.getElementById('typeFilter');
+  if (typeSelect && typeSelect.value && typeSelect.value !== 'All') {
+    tags.push({
+      label: `🏠 ${typeSelect.value}`,
+      onRemove: `document.getElementById('typeFilter').value='All'; loadListings();`
+    });
+  }
+
+  const wifiSelect = document.getElementById('wifiFilter');
+  if (wifiSelect && wifiSelect.value === 'wifi') {
+    tags.push({
+      label: '📶 WiFi Included',
+      onRemove: 'toggleWifiQuickFilter()'
+    });
+  }
+
+  const sortMode = getSelectedListingSort();
+  if (sortMode === 'price_asc') {
+    tags.push({
+      label: '↕️ Price: Low to High',
+      onRemove: `onSortChange('newest')`
+    });
+  } else if (sortMode === 'price_desc') {
+    tags.push({
+      label: '↕️ Price: High to Low',
+      onRemove: `onSortChange('newest')`
+    });
+  }
+
+  if (tags.length === 0) {
+    wrapper.classList.add('hidden');
+    container.innerHTML = '';
+  } else {
+    wrapper.classList.remove('hidden');
+    container.innerHTML = tags.map(t => `
+      <span class="inline-flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-2.5 py-1 rounded-lg border border-slate-200/80 transition">
+        <span>${escapeHtml(t.label)}</span>
+        <button type="button" onclick="${t.onRemove}" class="text-slate-400 hover:text-slate-800 font-black cursor-pointer leading-none text-xs ml-0.5" title="Remove filter">✕</button>
+      </span>
+    `).join('');
+  }
+}
+
 // 1. LOAD ROOM LISTINGS
 async function loadListings() {
   const countEl = document.getElementById('roomCount');
   const tabCountEl = document.getElementById('tabCountListings');
-  const suburb = document.getElementById('suburbFilter').value.trim();
-  const maxRent = document.getElementById('priceFilter').value;
-  const propertyType = document.getElementById('typeFilter').value;
+  const suburb = document.getElementById('suburbFilter') ? document.getElementById('suburbFilter').value.trim() : '';
+  const maxRent = document.getElementById('priceFilter') ? document.getElementById('priceFilter').value : '';
+  const propertyType = document.getElementById('typeFilter') ? document.getElementById('typeFilter').value : '';
   const wifiFilterEl = document.getElementById('wifiFilter');
   const wifiVal = wifiFilterEl ? wifiFilterEl.value : '';
+  const keywordInput = document.getElementById('keywordFilter');
+  const keyword = keywordInput ? keywordInput.value.trim() : '';
+  const sort = getSelectedListingSort();
+
+  // Render skeleton screen immediately to provide instant visual feedback during fetching
+  renderListingsSkeleton();
 
   const params = new URLSearchParams();
   if (suburb) params.set('suburb', suburb);
   if (maxRent) params.set('maxRent', maxRent);
   if (propertyType && propertyType !== 'All') params.set('propertyType', propertyType);
   if (wifiVal === 'wifi') params.set('wifi', 'true');
+  if (keyword) params.set('keyword', keyword);
+  if (sort) params.set('sort', sort);
 
   try {
     const res = await fetch('/api/listings?' + params.toString());
@@ -1733,18 +1976,23 @@ async function loadListings() {
     // Deep linking: check URL parameters on initial listing load
     checkUrlParamsAndOpenRoom();
   } catch (e) {
-    countEl.innerText = 'Failed to load listings.';
+    const grid = document.getElementById('listingsGrid');
+    if (grid) grid.removeAttribute('aria-busy');
+    if (countEl) countEl.innerText = 'Failed to load listings.';
   }
 }
 
 function renderListingsGrid(items) {
   const grid = document.getElementById('listingsGrid');
   const countEl = document.getElementById('roomCount');
+  if (grid) grid.removeAttribute('aria-busy');
 
-  let displayItems = items;
+  let displayItems = [...(items || [])];
+
   if (filterOnlyFavorites) {
     displayItems = displayItems.filter(r => savedListingIds.includes(r._id));
   }
+
   const wifiFilterEl = document.getElementById('wifiFilter');
   if (wifiFilterEl && wifiFilterEl.value === 'wifi') {
     displayItems = displayItems.filter(r => {
@@ -1752,6 +2000,46 @@ function renderListingsGrid(items) {
       return allText.includes('wifi') || allText.includes('wi-fi') || allText.includes('internet');
     });
   }
+
+  // Client-side keyword search (amenities, landmarks, building types, etc.)
+  const keywordInput = document.getElementById('keywordFilter');
+  const kw = keywordInput ? keywordInput.value.trim().toLowerCase() : '';
+  if (kw) {
+    displayItems = displayItems.filter(r => {
+      const title = (r.title || '').toLowerCase();
+      const suburb = (r.suburb || '').toLowerCase();
+      const address = (r.address || '').toLowerCase();
+      const institution = (r.nearbyInstitution || '').toLowerCase();
+      const propType = (r.propertyType || '').toLowerCase();
+      const desc = (r.description || '').toLowerCase();
+      const amenitiesStr = (r.amenities || []).join(' ').toLowerCase();
+      const landlord = (r.landlordFullName || (r.landlordId && r.landlordId.fullName) || '').toLowerCase();
+      return title.includes(kw) ||
+             suburb.includes(kw) ||
+             address.includes(kw) ||
+             institution.includes(kw) ||
+             propType.includes(kw) ||
+             desc.includes(kw) ||
+             amenitiesStr.includes(kw) ||
+             landlord.includes(kw);
+    });
+  }
+
+  // Sorting: price low to high, price high to low, or newest
+  const sortMode = getSelectedListingSort();
+  if (sortMode === 'price_asc') {
+    displayItems.sort((a, b) => (Number(a.monthlyRent) || 0) - (Number(b.monthlyRent) || 0));
+  } else if (sortMode === 'price_desc') {
+    displayItems.sort((a, b) => (Number(b.monthlyRent) || 0) - (Number(a.monthlyRent) || 0));
+  } else {
+    displayItems.sort((a, b) => {
+      const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return tB - tA;
+    });
+  }
+
+  updateActiveFilterBadges();
 
   countEl.innerText = `Showing ${displayItems.length} room${displayItems.length === 1 ? '' : 's'}`;
 
@@ -1826,18 +2114,16 @@ function renderListingsGrid(items) {
               <span class="text-emerald-700 font-bold">${room.hasWhatsapp ? 'WhatsApp' : 'Call'}</span>
             </div>
           ` : ''}
-          <div class="grid grid-cols-4 gap-1.5">
+          <div class="grid grid-cols-3 gap-2">
             <button onclick="event.stopPropagation(); openRoomDetail('${room._id}')" class="bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs py-2.5 rounded-xl transition text-center border border-slate-200 cursor-pointer">
               Details
             </button>
-            <button onclick="event.stopPropagation(); openShareModal('${room._id}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 rounded-xl transition text-center border border-slate-200 flex items-center justify-center gap-1 cursor-pointer" title="Share unique link with friends">
-              <span>📤</span>
+            <button onclick="event.stopPropagation(); openShareModal('${room._id}')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-2.5 rounded-xl transition text-center border border-slate-200 flex items-center justify-center gap-1.5 cursor-pointer" title="Share room">
+              <span>📤</span> <span>Share</span>
             </button>
-            <button onclick="event.stopPropagation(); openChatWithLandlord('${room._id}')" class="bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs py-2.5 rounded-xl transition text-center border border-rose-200 flex items-center justify-center gap-1 cursor-pointer" title="Chat with Landlord (In-Platform)">
-              <span>💬 Chat</span>
-            </button>
-            <button onclick="event.stopPropagation(); contactLandlord('${room._id}')" class="bg-slate-900 hover:bg-emerald-600 text-white font-bold text-xs py-2.5 rounded-xl transition text-center shadow-xs flex items-center justify-center gap-1 cursor-pointer" title="Chat on WhatsApp">
-              <span>📱 WA</span>
+            <button onclick="event.stopPropagation(); contactLandlord('${room._id}')" class="bg-slate-900 hover:bg-emerald-600 text-white font-bold text-xs py-2.5 rounded-xl transition text-center shadow-xs flex items-center justify-center gap-1.5 cursor-pointer" title="Chat on WhatsApp">
+              <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+              <span>WhatsApp</span>
             </button>
           </div>
         </div>
@@ -1927,200 +2213,8 @@ function openRoomDetail(id, updateHistory = true) {
   }
 }
 
-// ----------------------------------------------------
-// IN-PLATFORM MESSAGING: CHAT WITH LANDLORD
-// ----------------------------------------------------
-let activeChatListingId = null;
-let chatPollingTimer = null;
-
-function getOrCreateTenantId() {
-  let id = localStorage.getItem('rentaroom_tenant_id');
-  if (!id) {
-    id = 'tenant_' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
-    localStorage.setItem('rentaroom_tenant_id', id);
-  }
-  return id;
-}
-
-async function openChatWithLandlord(id) {
-  let room = loadedListingsCache.find(r => r._id === id);
-  if (!room && activeDetailListing && activeDetailListing._id === id) {
-    room = activeDetailListing;
-  }
-  if (!room) return;
-  activeChatListingId = room._id;
-  activeDetailListing = room;
-
-  // Set header details
-  const nameEl = document.getElementById('chatLandlordName');
-  const subEl = document.getElementById('chatListingSubtitle');
-  if (nameEl) nameEl.innerText = room.landlordFullName ? `Chat with ${room.landlordFullName}` : 'Chat with Landlord';
-  if (subEl) subEl.innerText = `${room.title} • R${Number(room.monthlyRent).toLocaleString()}/mo in ${room.suburb}`;
-
-  // Restore saved sender details
-  const savedName = localStorage.getItem('rentaroom_chat_sender_name');
-  const savedPhone = localStorage.getItem('rentaroom_chat_sender_phone');
-  if (savedName) document.getElementById('chatSenderName').value = savedName;
-  if (savedPhone) document.getElementById('chatSenderPhone').value = savedPhone;
-
-  // Show modal
-  const chatModal = document.getElementById('landlordChatModal');
-  if (chatModal && chatModal.classList.contains('hidden')) {
-    toggleModal('landlordChatModal');
-  }
-
-  // Load messages
-  await loadChatMessages(room._id);
-
-  // Focus input
-  setTimeout(() => {
-    const input = document.getElementById('chatMessageInput');
-    if (input) input.focus();
-  }, 150);
-
-  // Setup periodic refresh while open
-  if (chatPollingTimer) clearInterval(chatPollingTimer);
-  chatPollingTimer = setInterval(() => {
-    const m = document.getElementById('landlordChatModal');
-    if (m && !m.classList.contains('hidden') && activeChatListingId) {
-      loadChatMessages(activeChatListingId, true);
-    } else if (chatPollingTimer) {
-      clearInterval(chatPollingTimer);
-      chatPollingTimer = null;
-    }
-  }, 4000);
-}
-
-function insertQuickMessage(text) {
-  const input = document.getElementById('chatMessageInput');
-  if (input) {
-    input.value = text;
-    input.focus();
-  }
-}
-
-async function loadChatMessages(listingId, silent = false) {
-  const container = document.getElementById('chatMessagesContainer');
-  if (!container) return;
-  if (!silent) {
-    container.innerHTML = '<div class="text-center py-6 text-slate-400 text-xs font-medium animate-pulse">Connecting to landlord...</div>';
-  }
-
-  const tenantId = getOrCreateTenantId();
-  try {
-    const res = await fetch(`/api/listings/${listingId}/messages?tenantId=${encodeURIComponent(tenantId)}`);
-    if (!res.ok) throw new Error('Failed to load chat history');
-    const data = await res.json();
-    const messages = Array.isArray(data.data) ? data.data : ((data.data && data.data.messages) || data.messages || []);
-
-    renderChatMessages(messages);
-  } catch (err) {
-    if (!silent) {
-      container.innerHTML = `<div class="text-center py-4 text-red-500 text-xs font-semibold">Could not load messages: ${escapeHtml(err.message)}</div>`;
-    }
-  }
-}
-
-function renderChatMessages(messages) {
-  const container = document.getElementById('chatMessagesContainer');
-  if (!container) return;
-
-  if (messages.length === 0) {
-    container.innerHTML = `
-      <div class="text-center py-8 px-4 space-y-2">
-        <div class="w-12 h-12 rounded-full bg-rose-50 text-rose-500 text-2xl mx-auto flex items-center justify-center">👋</div>
-        <h4 class="font-bold text-sm text-slate-800">Start the conversation</h4>
-        <p class="text-xs text-slate-500 max-w-xs mx-auto">Ask about availability, arrange an in-person viewing, or confirm utility costs directly with the verified landlord.</p>
-      </div>
-    `;
-    return;
-  }
-
-  const html = messages.map(msg => {
-    const isTenant = msg.sender === 'tenant';
-    const timeFormatted = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
-    if (isTenant) {
-      return `
-        <div class="flex flex-col items-end space-y-1">
-          <div class="max-w-[85%] bg-rose-500 text-white rounded-2xl rounded-br-xs px-4 py-2.5 text-xs shadow-xs leading-relaxed">
-            ${escapeHtml(msg.text)}
-          </div>
-          <span class="text-[10px] text-slate-400 font-medium pr-1">${escapeHtml(timeFormatted)} • You</span>
-        </div>
-      `;
-    } else {
-      return `
-        <div class="flex flex-col items-start space-y-1">
-          <div class="flex items-center gap-1.5 pl-1">
-            <span class="text-[10px] font-bold text-slate-700">${escapeHtml(msg.senderName || 'Landlord')}</span>
-            <span class="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded-full">✓ Verified</span>
-          </div>
-          <div class="max-w-[85%] bg-white text-slate-800 border border-slate-200 rounded-2xl rounded-bl-xs px-4 py-2.5 text-xs shadow-xs leading-relaxed">
-            ${escapeHtml(msg.text)}
-          </div>
-          <span class="text-[10px] text-slate-400 font-medium pl-1">${escapeHtml(timeFormatted)}</span>
-        </div>
-      `;
-    }
-  }).join('');
-
-  container.innerHTML = html;
-  container.scrollTop = container.scrollHeight;
-}
-
-async function handleSendLandlordMessage(e) {
-  e.preventDefault();
-  if (!activeChatListingId) return;
-
-  const input = document.getElementById('chatMessageInput');
-  const nameInput = document.getElementById('chatSenderName');
-  const phoneInput = document.getElementById('chatSenderPhone');
-  const submitBtn = document.getElementById('chatSubmitBtn');
-
-  const text = (input.value || '').trim();
-  const senderName = (nameInput.value || '').trim() || 'Tenant';
-  const senderPhone = (phoneInput.value || '').trim();
-
-  if (!text) return;
-
-  localStorage.setItem('rentaroom_chat_sender_name', senderName);
-  if (senderPhone) localStorage.setItem('rentaroom_chat_sender_phone', senderPhone);
-
-  const tenantId = getOrCreateTenantId();
-
-  submitBtn.disabled = true;
-  submitBtn.innerHTML = '<span>...</span>';
-
-  try {
-    const res = await fetch(`/api/listings/${activeChatListingId}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tenantId,
-        text,
-        senderName,
-        senderPhone
-      })
-    });
-
-    const data = await res.json();
-    if (res.ok && data.success) {
-      input.value = '';
-      await loadChatMessages(activeChatListingId);
-      // Wait slightly and refresh in case auto-reply triggered
-      setTimeout(() => {
-        loadChatMessages(activeChatListingId, true);
-      }, 1200);
-    } else {
-      showToast(data.message || 'Failed to send message.', 'error');
-    }
-  } catch (err) {
-    showToast('Network error sending message. Please retry.', 'error');
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.innerHTML = '<span>Send</span><span>➤</span>';
-  }
+function openChatWithLandlord(id) {
+  contactLandlord(id);
 }
 
 function closeRoomDetailModal() {
@@ -2311,6 +2405,66 @@ function shareCurrentListing() {
   openShareModal(activeDetailListing._id);
 }
 
+// Helper to build a single seeker skeleton card
+function createSeekerSkeletonHtml(i = 1) {
+  return `
+    <div id="seeker-skeleton-${i}" class="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-xs flex flex-col justify-between p-5 space-y-4 select-none pointer-events-none" aria-hidden="true">
+      <div>
+        <!-- Top row: Name, verified badge, occupation badge -->
+        <div class="flex items-start justify-between gap-2 mb-2">
+          <div class="space-y-1.5 flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <div class="h-5 w-32 bg-slate-200 rounded skeleton-shimmer"></div>
+              <div class="h-4 w-24 bg-emerald-100/70 rounded-full skeleton-shimmer"></div>
+            </div>
+            <div class="h-3.5 w-36 bg-slate-200 rounded skeleton-shimmer mt-1"></div>
+          </div>
+          <div class="h-6 w-24 bg-slate-100 rounded-lg border border-slate-200 skeleton-shimmer shrink-0"></div>
+        </div>
+
+        <!-- Budget Box placeholder -->
+        <div class="my-3 p-3.5 bg-emerald-50/40 border border-emerald-100/80 rounded-xl flex items-center justify-between">
+          <div class="space-y-1.5">
+            <div class="h-3 w-16 bg-emerald-200/60 rounded skeleton-shimmer"></div>
+            <div class="h-6 w-28 bg-emerald-200/80 rounded skeleton-shimmer"></div>
+          </div>
+          <div class="space-y-1.5 text-right">
+            <div class="h-3 w-14 bg-emerald-200/60 rounded ml-auto skeleton-shimmer"></div>
+            <div class="h-4 w-20 bg-emerald-200/80 rounded ml-auto skeleton-shimmer"></div>
+          </div>
+        </div>
+
+        <!-- Details and Notes placeholder -->
+        <div class="space-y-2">
+          <div class="flex items-center gap-2">
+            <div class="h-3.5 w-24 bg-slate-200 rounded skeleton-shimmer"></div>
+            <div class="h-5 w-24 bg-slate-100 rounded border border-slate-200 skeleton-shimmer"></div>
+          </div>
+          <div class="h-14 w-full bg-slate-50 p-3 rounded-xl border border-slate-200/60 space-y-1.5">
+            <div class="h-3 w-full bg-slate-200 rounded skeleton-shimmer"></div>
+            <div class="h-3 w-3/4 bg-slate-200 rounded skeleton-shimmer"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action button placeholder -->
+      <div class="pt-3 border-t border-slate-100">
+        <div class="h-10 w-full bg-emerald-200/60 rounded-xl skeleton-shimmer"></div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSeekersSkeleton(count = 6) {
+  const grid = document.getElementById('seekersGrid');
+  const countEl = document.getElementById('seekerCount');
+  if (!grid) return;
+  if (countEl) countEl.innerText = 'Searching room requests...';
+  grid.setAttribute('aria-busy', 'true');
+  grid.setAttribute('aria-label', 'Loading room seekers');
+  grid.innerHTML = Array.from({ length: count }, (_, i) => createSeekerSkeletonHtml(i + 1)).join('');
+}
+
 // 2. LOAD ROOM SEEKERS
 async function loadSeekers() {
   const grid = document.getElementById('seekersGrid');
@@ -2319,6 +2473,9 @@ async function loadSeekers() {
   const suburb = document.getElementById('seekerSuburbFilter').value.trim();
   const maxBudget = document.getElementById('seekerBudgetFilter').value;
   const roomType = document.getElementById('seekerTypeFilter').value;
+
+  // Render seeker skeleton screen immediately to provide instant visual feedback during fetching
+  renderSeekersSkeleton();
 
   const params = new URLSearchParams();
   if (suburb) params.set('suburb', suburb);
@@ -2330,6 +2487,7 @@ async function loadSeekers() {
     const data = await res.json();
     const items = data.requests || [];
     
+    if (grid) grid.removeAttribute('aria-busy');
     if (tabCountEl) tabCountEl.innerText = items.length;
     countEl.innerText = `Showing ${items.length} seeker request${items.length === 1 ? '' : 's'}`;
 
@@ -2386,6 +2544,7 @@ async function loadSeekers() {
       </div>
     `).join('');
   } catch (e) {
+    if (grid) grid.removeAttribute('aria-busy');
     countEl.innerText = 'Failed to load requests.';
   }
 }
@@ -2604,13 +2763,54 @@ function updateWifiPillState() {
   }
 }
 
+function submitListingsSearch() {
+  const btn = document.getElementById('searchRoomsSubmitBtn');
+  if (btn) {
+    btn.classList.add('scale-95', 'opacity-90');
+    setTimeout(() => btn.classList.remove('scale-95', 'opacity-90'), 200);
+  }
+  updateActiveFilterBadges();
+  loadListings();
+  const target = document.getElementById('listingsView');
+  if (target && window.innerWidth < 768) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function submitSeekersSearch() {
+  const btn = document.getElementById('searchSeekersSubmitBtn');
+  if (btn) {
+    btn.classList.add('scale-95', 'opacity-90');
+    setTimeout(() => btn.classList.remove('scale-95', 'opacity-90'), 200);
+  }
+  loadSeekers();
+  const target = document.getElementById('seekersView');
+  if (target && window.innerWidth < 768) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 function resetListingFilters() {
-  document.getElementById('suburbFilter').value = '';
-  document.getElementById('priceFilter').value = '';
-  document.getElementById('typeFilter').value = 'All';
+  const sub = document.getElementById('suburbFilter');
+  if (sub) sub.value = '';
+  const price = document.getElementById('priceFilter');
+  if (price) price.value = '';
+  const type = document.getElementById('typeFilter');
+  if (type) type.value = 'All';
   const wifiSelect = document.getElementById('wifiFilter');
   if (wifiSelect) wifiSelect.value = '';
+  const kw = document.getElementById('keywordFilter');
+  if (kw) kw.value = '';
+  const clearBtn = document.getElementById('clearKeywordBtn');
+  if (clearBtn) clearBtn.classList.add('hidden');
+  const topSort = document.getElementById('sortBySelect');
+  if (topSort) topSort.value = 'newest';
+  const barSort = document.getElementById('sortFilterSelect');
+  if (barSort) barSort.value = 'newest';
+
+  highlightActiveKeywordChips('');
   updateWifiPillState();
+  updateActiveFilterBadges();
   filterOnlyFavorites = false;
   const btn = document.getElementById('filterOnlySavedBtn');
   if (btn) btn.className = 'text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1';
@@ -3040,7 +3240,21 @@ async function handleInitialSubmit(e) {
 
   const manualUrlInput = document.getElementById('newImage');
   const manualUrl = manualUrlInput ? manualUrlInput.value.trim() : '';
-  const finalImage = uploadedPhotoData || (manualUrl.startsWith('http') ? manualUrl : '');
+  let finalImage = uploadedPhotoData || (manualUrl.startsWith('http') ? manualUrl : '');
+
+  // If finalImage is still a base64 data URI, ensure it is moved to Firebase Storage before submitting
+  if (finalImage && finalImage.startsWith('data:image/')) {
+    try {
+      if (submitBtn) submitBtn.innerText = 'Uploading photo to Firebase Storage...';
+      const storageUrl = await uploadPhotoToFirebaseStorage(finalImage, null);
+      if (storageUrl && (storageUrl.startsWith('http') || storageUrl.startsWith('/uploads/'))) {
+        finalImage = storageUrl;
+        uploadedPhotoData = storageUrl;
+      }
+    } catch (e) {
+      console.warn('Pre-submit storage upload note:', e.message);
+    }
+  }
 
   const listingData = {
     fullName: nameVal.normalized || rawOwnerName,
@@ -3579,6 +3793,40 @@ function resizeAndCompressImage(file) {
   });
 }
 
+async function uploadPhotoToFirebaseStorage(dataUrl, file) {
+  try {
+    setPhotoProcessingUI(true, 'Uploading to Firebase Storage...');
+    // Convert data URL to Blob for fast multipart streaming
+    const fetchBlob = await fetch(dataUrl);
+    const blob = await fetchBlob.blob();
+
+    const formData = new FormData();
+    const fileName = file ? (file.name || 'room_photo.jpg') : 'room_photo.jpg';
+    formData.append('photo', blob, fileName);
+
+    const res = await fetch('/api/upload/photo', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!res.ok) {
+      throw new Error(`Upload returned status ${res.status}`);
+    }
+
+    const json = await res.json();
+    const publicUrl = json.data?.url || json.url;
+
+    if (publicUrl && typeof publicUrl === 'string') {
+      console.log('[uploadPhotoToFirebaseStorage] Successfully stored photo on Firebase Storage:', publicUrl);
+      return publicUrl;
+    }
+    return dataUrl;
+  } catch (err) {
+    console.warn('[uploadPhotoToFirebaseStorage] Firebase Storage background upload notice:', err.message);
+    return dataUrl;
+  }
+}
+
 async function processPhotoFile(file) {
   if (!file) return;
   if (!file.type || !file.type.startsWith('image/')) {
@@ -3600,12 +3848,23 @@ async function processPhotoFile(file) {
     photoProcessingPromise = resizeAndCompressImage(file);
     const verifiedDataUrl = await photoProcessingPromise;
 
-    // Explicit check to verify the image data URL has been correctly generated before updating uploadedPhotoData
+    // Explicit check to verify the image data URL has been correctly generated
     if (verifiedDataUrl && typeof verifiedDataUrl === 'string' && verifiedDataUrl.startsWith('data:image/') && verifiedDataUrl.length > 200) {
-      uploadedPhotoData = verifiedDataUrl;
-      console.log('[processPhotoFile] uploadedPhotoData successfully verified and assigned. Total characters:', uploadedPhotoData.length);
-      displayPhotoPreview(uploadedPhotoData, file.name);
-      showToast('Room picture attached successfully! 📸', 'success');
+      // Immediate responsive UI preview
+      displayPhotoPreview(verifiedDataUrl, file.name);
+
+      // Upload directly to Firebase Storage
+      setPhotoProcessingUI(true, 'Uploading to Firebase Storage...');
+      const storageUrl = await uploadPhotoToFirebaseStorage(verifiedDataUrl, file);
+      uploadedPhotoData = storageUrl;
+
+      const badge = document.getElementById('uploadStatusBadge');
+      if (badge) {
+        badge.innerText = storageUrl.includes('firebasestorage') ? 'Firebase Storage ✓' : 'Photo Attached ✓';
+        badge.className = 'text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full';
+      }
+      console.log('[processPhotoFile] Photo successfully uploaded and attached. URL:', uploadedPhotoData);
+      showToast('Room picture uploaded to Firebase Storage! 📸', 'success');
     } else {
       throw new Error('Generated data URL failed integrity check.');
     }
