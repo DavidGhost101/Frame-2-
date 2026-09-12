@@ -7,6 +7,7 @@ router.get('/', roomRequestController.getRoomRequests);
 router.post('/', roomRequestController.createRoomRequest);
 router.post('/create', roomRequestController.createRoomRequest);
 router.put('/:id/status', requireAdmin, roomRequestController.updateStatus);
+router.delete('/:id', requireAdmin, roomRequestController.deleteRoomRequest);
 router.post('/:id/contact', roomRequestController.trackContact);
 
 module.exports = router;

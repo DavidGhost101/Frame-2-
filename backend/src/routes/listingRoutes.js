@@ -2,20 +2,24 @@ const express = require('express');
 const router = express.Router();
 const listingController = require('../controllers/ListingController');
 const listingService = require('../services/ListingService');
-const { authenticate, optionalAuth, checkNotBlocked } = require('../middleware/authMiddleware');
+const { authenticate, optionalAuth, checkNotBlocked, requireAdmin } = require('../middleware/authMiddleware');
 const { listingCreateLimiter } = require('../middleware/rateLimiters');
 const ApiResponse = require('../utils/apiResponse');
+const { serializeListing } = require('../utils/securitySanitizer');
 
 router.get('/', listingController.getListings);
+
+// Administrative recent messages feed (strictly protected)
+router.get('/messages/recent', requireAdmin, listingController.getAllRecentMessages);
 
 // Get landlord's own listings
 router.get('/mine', authenticate, async (req, res, next) => {
   try {
     const landlordId = req.user.landlordId || req.user.userId;
     const result = await listingService.getListings({ status: 'all', limit: 50 });
-    const myListings = (result.items || []).filter(
-      l => l.landlordId && (l.landlordId._id || l.landlordId).toString() === landlordId.toString()
-    );
+    const myListings = (result.items || [])
+      .filter(l => l.landlordId && (l.landlordId._id || l.landlordId).toString() === landlordId.toString())
+      .map(l => serializeListing(l, true));
     return ApiResponse.success(res, 'My listings retrieved', myListings, 200, {
       listings: myListings,
       count: myListings.length
@@ -41,6 +45,5 @@ router.post('/:id/report', listingController.reportListing);
 // In-Platform Tenant <-> Landlord Chat Messaging Endpoints
 router.get('/:id/messages', listingController.getMessages);
 router.post('/:id/messages', listingController.sendMessage);
-router.get('/messages/recent', listingController.getAllRecentMessages);
 
 module.exports = router;

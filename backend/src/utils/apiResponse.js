@@ -2,6 +2,8 @@
  * Standardized API Response Utilities
  */
 
+const { sanitizeData } = require('./securitySanitizer');
+
 class ApiResponse {
   /**
    * Send a success response
@@ -12,13 +14,14 @@ class ApiResponse {
    * @param {Object} extraFields - Additional root-level fields for backwards compatibility
    */
   static success(res, message = 'Operation completed successfully', data = {}, statusCode = 200, extraFields = {}) {
-    const payload = {
+    const rawPayload = {
       success: true,
       message,
       data,
       ...extraFields
     };
-    return res.status(statusCode).json(payload);
+    const sanitizedPayload = sanitizeData(rawPayload);
+    return res.status(statusCode).json(sanitizedPayload);
   }
 
   /**
@@ -30,16 +33,17 @@ class ApiResponse {
    * @param {String} code - Error code identifier
    */
   static error(res, message = 'An unexpected error occurred', statusCode = 500, errors = [], code = null) {
-    const payload = {
+    const rawPayload = {
       success: false,
       message,
       errors: Array.isArray(errors) ? errors : [errors],
       error: message // Backwards compatibility for legacy frontend checking res.error
     };
     if (code) {
-      payload.code = code;
+      rawPayload.code = code;
     }
-    return res.status(statusCode).json(payload);
+    const sanitizedPayload = sanitizeData(rawPayload);
+    return res.status(statusCode).json(sanitizedPayload);
   }
 
   /**
@@ -47,7 +51,7 @@ class ApiResponse {
    */
   static paginated(res, message, items, page, limit, total, extra = {}) {
     const totalPages = Math.ceil(total / (limit || 1)) || 1;
-    return res.status(200).json({
+    const rawPayload = {
       success: true,
       message,
       data: {
@@ -66,8 +70,11 @@ class ApiResponse {
       total: Number(total),
       page: Number(page),
       ...extra
-    });
+    };
+    const sanitizedPayload = sanitizeData(rawPayload);
+    return res.status(200).json(sanitizedPayload);
   }
 }
 
 module.exports = ApiResponse;
+

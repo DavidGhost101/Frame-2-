@@ -10,11 +10,13 @@ async function seed() {
     // 1. Seed Super Admin & Staff User accounts
     const adminUser = await User.findOne({ email: 'admin@rentaroomsoweto.co.za' });
     if (!adminUser) {
+      const crypto = require('crypto');
+      const initialPassword = process.env.ADMIN_INITIAL_PASSWORD || crypto.randomBytes(16).toString('hex');
       await User.create({
         fullName: 'Soweto Platform Super Admin',
         email: 'admin@rentaroomsoweto.co.za',
         phone: '+27820000001',
-        password: 'AdminSuperPassword2026!',
+        password: initialPassword,
         role: ROLES.SUPER_ADMIN,
         status: 'active',
         isEmailVerified: true,

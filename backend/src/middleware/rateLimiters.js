@@ -1,12 +1,13 @@
 const rateLimit = require('express-rate-limit');
 const ApiResponse = require('../utils/apiResponse');
 
-// General API rate limiter (300 requests per 15 minutes)
+// General API rate limiter (2000 requests per 15 minutes)
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 300,
+  max: 2000,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS' || (req.path && req.path.startsWith('/admin')),
   handler: (req, res) => {
     return ApiResponse.error(res, 'Too many requests. Please try again in a few minutes.', 429);
   }
@@ -15,9 +16,10 @@ const apiLimiter = rateLimit({
 // Authentication rate limiter for password/admin endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
   handler: (req, res) => {
     return ApiResponse.error(res, 'Too many requests. Please wait a few minutes before trying again.', 429);
   }
@@ -29,17 +31,19 @@ const otpLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
   handler: (req, res) => {
     return ApiResponse.error(res, 'Too many verification code requests. Please wait a few moments before trying again.', 429);
   }
 });
 
-// Listing creation rate limiter (15 requests per 1 hour)
+// Listing creation rate limiter (100 requests per 1 hour)
 const listingCreateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 15,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
   handler: (req, res) => {
     return ApiResponse.error(res, 'Listing creation rate limit reached. Please wait before adding more rooms.', 429);
   }
@@ -56,10 +60,22 @@ const aiAdvisorLimiter = rateLimit({
   }
 });
 
+// Upload rate limiter (60 uploads per 15 minutes)
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    return ApiResponse.error(res, 'Upload rate limit reached. Please wait before uploading more photos.', 429);
+  }
+});
+
 module.exports = {
   apiLimiter,
   authLimiter,
   otpLimiter,
   listingCreateLimiter,
-  aiAdvisorLimiter
+  aiAdvisorLimiter,
+  uploadLimiter
 };

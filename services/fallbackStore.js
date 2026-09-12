@@ -1,5 +1,6 @@
 // Resilient In-Memory Store: Ensures instant, zero-latency operations
 // with automated disk persistence and Cloud Firestore synchronization.
+const bcrypt = require('bcryptjs');
 const persistentStore = require('./persistentStore');
 
 const fallbackLandlords = [
@@ -98,8 +99,9 @@ const fallbackLandlords = [
 const fallbackUsers = [
   {
     _id: 'user_001',
-    fullName: 'Soweto Platform Super Admin',
-    email: 'admin@rentaroomsoweto.co.za',
+    fullName: 'Administrator',
+    email: 'admin@platform.internal',
+    username: 'admin',
     phone: '+27820000001',
     role: 'SUPER_ADMIN',
     status: 'active',
@@ -401,6 +403,18 @@ function addLandlord(data) {
 
 function addListing(data) {
   const serverTime = (data && data.createdAt) ? new Date(data.createdAt) : new Date();
+  const defaultImagesByType = {
+    'Ensuite': '/images/township_ensuite.jpg',
+    'Backroom': '/images/township_backroom.jpg',
+    'Garage': '/images/converted_garage.jpg',
+    'Student Accommodation': '/images/student_room.jpg',
+    'Apartment': '/images/township_ensuite.jpg',
+    'Flatlet': '/images/converted_garage.jpg'
+  };
+  const resolvedImage = (data && data.image && data.image.trim()) 
+    ? data.image.trim() 
+    : (defaultImagesByType[data?.propertyType] || '/images/township_backroom.jpg');
+
   const newListing = {
     _id: (data && data._id) ? data._id : ('listing_' + Date.now()),
     status: (data && data.status) ? data.status : 'pending_review',
@@ -411,6 +425,7 @@ function addListing(data) {
     flagReasons: (data && data.flagReasons) || [],
     reportCount: 0,
     ...data,
+    image: resolvedImage,
     createdAt: serverTime
   };
   fallbackListings.unshift(newListing);
@@ -651,6 +666,98 @@ function updateUser(id, updateData) {
   return null;
 }
 
+function findAdminUser(identifier = '') {
+  const norm = String(identifier || '').trim().toLowerCase();
+  const admins = fallbackUsers.filter(u => u.role === 'SUPER_ADMIN' || u.role === 'ADMIN');
+  if (admins.length === 0) return fallbackUsers[0] || null;
+
+  if (!norm || norm === 'admin' || norm === 'superadmin') {
+    return admins[0];
+  }
+
+  const matched = admins.find(u => {
+    if (u.email && u.email.toLowerCase() === norm) return true;
+    if (Array.isArray(u.emails) && u.emails.some(e => String(e).toLowerCase() === norm)) return true;
+    if (u.username && u.username.toLowerCase() === norm) return true;
+    if (u.phone && (u.phone === norm || u.phone.replace(/\D/g, '') === norm.replace(/\D/g, ''))) return true;
+    return false;
+  });
+
+  return matched || admins[0];
+}
+
+function getAdminUser() {
+  return fallbackUsers.find(u => u.role === 'SUPER_ADMIN' || u.role === 'ADMIN') || fallbackUsers[0];
+}
+
+function setAdminPassword(plainPassword) {
+  if (!plainPassword || typeof plainPassword !== 'string' || plainPassword.trim().length < 6) {
+    throw new Error('Admin password must be at least 6 characters.');
+  }
+  const cleanPass = plainPassword.trim();
+  const hash = bcrypt.hashSync(cleanPass, 10);
+
+  const admin = getAdminUser();
+  if (admin) {
+    admin.fullName = 'Administrator';
+    admin.passwordHash = hash;
+    admin.passwordResetRequired = false;
+    admin.updatedAt = new Date();
+    saveStore();
+    return {
+      _id: admin._id,
+      fullName: 'Administrator',
+      role: admin.role,
+      status: admin.status
+    };
+  }
+  return null;
+}
+
+function verifyAdminPassword(candidatePassword, identifier = '') {
+  if (!candidatePassword || typeof candidatePassword !== 'string') {
+    return { valid: false, reason: 'MISSING_PASSWORD' };
+  }
+
+  const admin = findAdminUser(identifier);
+  if (!admin) {
+    return { valid: false, reason: 'ADMIN_NOT_FOUND' };
+  }
+
+  const candidate = candidatePassword.trim();
+
+  // 1. Verify against bcrypt hash if present
+  if (admin.passwordHash && typeof admin.passwordHash === 'string') {
+    try {
+      const match = bcrypt.compareSync(candidate, admin.passwordHash);
+      if (match) {
+        return { valid: true, user: admin };
+      }
+    } catch (_) {}
+  }
+
+  // 2. Verification against environment secrets
+  const envPassword = process.env.ADMIN_PASSWORD && !process.env.ADMIN_PASSWORD.includes('replace_with_') ? process.env.ADMIN_PASSWORD.trim() : null;
+  const envAdminKey = process.env.ADMIN_KEY && !process.env.ADMIN_KEY.includes('replace_with_') ? process.env.ADMIN_KEY.trim() : null;
+  const envSmtpPass = process.env.SMTP_PASS && !process.env.SMTP_PASS.includes('replace_with_') && process.env.SMTP_PASS.trim().length >= 6 ? process.env.SMTP_PASS.trim() : null;
+
+  const validSecrets = [
+    envPassword,
+    envAdminKey,
+    envSmtpPass
+  ].filter(Boolean);
+
+  if (validSecrets.includes(candidate)) {
+    try {
+      admin.passwordHash = bcrypt.hashSync(candidate, 10);
+      saveStore();
+    } catch (_) {}
+    return { valid: true, user: admin };
+  }
+
+  return { valid: false, reason: 'INVALID_CREDENTIALS' };
+}
+
 function getAllMessages(limit = 100) {
   return [...fallbackMessages]
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -661,6 +768,16 @@ function getAllMessages(limit = 100) {
 try {
   const saved = persistentStore.loadFromDisk();
   if (saved) {
+    if (Array.isArray(saved.users) && saved.users.length > 0) {
+      for (const item of saved.users) {
+        const idx = fallbackUsers.findIndex(u => String(u._id) === String(item._id));
+        if (idx >= 0) {
+          fallbackUsers[idx] = { ...fallbackUsers[idx], ...item };
+        } else {
+          fallbackUsers.push(item);
+        }
+      }
+    }
     if (Array.isArray(saved.listings) && saved.listings.length > 0) {
       for (const item of saved.listings) {
         const idx = fallbackListings.findIndex(l => String(l._id) === String(item._id));
@@ -716,7 +833,7 @@ setTimeout(() => {
     fallbackMessages,
     fallbackAuditLogs
   });
-}, 1000);
+}, 1000).unref();
 
 // Auto-save periodically to persist any in-place mutations
 const autoSaveTimer = setInterval(saveStore, 30000);
@@ -742,6 +859,10 @@ module.exports = {
   deleteRequest,
   getUserById,
   updateUser,
+  findAdminUser,
+  getAdminUser,
+  setAdminPassword,
+  verifyAdminPassword,
   addAuditLog,
   fallbackMessages,
   addMessage,

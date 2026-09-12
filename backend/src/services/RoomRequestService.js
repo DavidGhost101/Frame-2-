@@ -11,7 +11,7 @@ setInterval(() => {
   for (const [key, val] of recentRequestSubmissions.entries()) {
     if (val.timestamp < cutoff) recentRequestSubmissions.delete(key);
   }
-}, 60000);
+}, 60000).unref();
 
 class RoomRequestService {
   /**
@@ -66,7 +66,15 @@ class RoomRequestService {
         sort: { [sortBy]: sortOrder }
       };
 
-      const { items, total } = await roomRequestRepository.findPaginated(filter, pagination);
+      let items = [];
+      let total = 0;
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        try {
+          const res = await roomRequestRepository.findPaginated(filter, pagination);
+          items = res.items || [];
+          total = res.total || 0;
+        } catch (_) {}
+      }
 
       if (total === 0 && fallbackStore && fallbackStore.fallbackRequests) {
         let fbItems = fallbackStore.fallbackRequests.filter(r => !r.isDeleted && r.status !== 'archived');
@@ -204,6 +212,33 @@ class RoomRequestService {
       req = fallbackStore.fallbackRequests.find(r => String(r._id) === String(id));
     }
     return req;
+  }
+
+  /**
+   * Update room request details (resilient to both DB and fallbackStore)
+   */
+  async updateRoomRequest(id, updateData = {}, adminUser = null) {
+    let request = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      try {
+        request = await roomRequestRepository.updateById(id, updateData);
+      } catch (err) {
+        console.warn('DB updateRoomRequest warning:', err.message);
+      }
+    }
+
+    if (fallbackStore && fallbackStore.fallbackRequests) {
+      const item = fallbackStore.fallbackRequests.find(r => String(r._id) === String(id));
+      if (item) {
+        Object.assign(item, updateData);
+        if (typeof fallbackStore.saveStore === 'function') {
+          try { fallbackStore.saveStore(); } catch (_) {}
+        }
+        if (!request) request = item;
+      }
+    }
+
+    return request;
   }
 
   /**

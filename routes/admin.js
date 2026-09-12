@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const rateLimit = require('express-rate-limit');
+const config = require('../backend/src/config');
 const { requireAdmin } = require('../middleware/auth');
 const Listing = require('../models/Listing');
 const Landlord = require('../models/Landlord');
@@ -29,12 +30,17 @@ const adminLoginLimiter = rateLimit({
 // LOGIN: exchange the admin key for a session cookie
 router.post('/login', adminLoginLimiter, (req, res) => {
   const { adminKey } = req.body;
-  const validKey = process.env.ADMIN_KEY || 'Kgutlisiii1!';
-  if (!adminKey || (adminKey !== validKey && adminKey !== 'Kgutlisiii1!')) {
+  const validKey = (config.admin && config.admin.key) || process.env.ADMIN_KEY;
+  if (!validKey || !adminKey || adminKey !== validKey) {
     return res.status(401).json({ error: 'Incorrect admin key.' });
   }
 
-  const token = jwt.sign({ role: 'admin' }, process.env.JWT_SECRET, { expiresIn: '12h' });
+  const jwtSecret = (config.jwt && config.jwt.secret) || process.env.JWT_SECRET;
+  if (!jwtSecret) {
+    return res.status(500).json({ error: 'Server authentication secret is not configured.' });
+  }
+
+  const token = jwt.sign({ role: 'admin' }, jwtSecret, { expiresIn: '12h' });
   res.cookie('admin_token', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',

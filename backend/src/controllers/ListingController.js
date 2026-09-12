@@ -3,20 +3,22 @@ const ListingValidator = require('../validators/listingValidator');
 const ApiResponse = require('../utils/apiResponse');
 const { toWhatsAppNumber, buildWhatsAppLinks } = require('../utils/phoneUtils');
 const fallbackStore = require('../../../services/fallbackStore');
-
+const { serializeListing } = require('../utils/securitySanitizer');
 
 class ListingController {
   async getListings(req, res, next) {
     try {
+      const isPrivileged = Boolean(req.user && (req.user.admin || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN'));
       const result = await listingService.getListings(req.query);
+      const safeItems = (result.items || []).map(item => serializeListing(item, isPrivileged));
       return ApiResponse.paginated(
         res,
         'Listings retrieved successfully',
-        result.items,
+        safeItems,
         result.page,
         result.limit,
         result.total,
-        { listings: result.items } // Legacy backward compatibility
+        { listings: safeItems } // Legacy backward compatibility
       );
     } catch (err) {
       next(err);
@@ -25,9 +27,11 @@ class ListingController {
 
   async getListingById(req, res, next) {
     try {
+      const isPrivileged = Boolean(req.user && (req.user.admin || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN'));
       const listing = await listingService.getListingById(req.params.id);
-      return ApiResponse.success(res, 'Listing retrieved successfully', listing, 200, {
-        listing
+      const safeListing = serializeListing(listing, isPrivileged);
+      return ApiResponse.success(res, 'Listing retrieved successfully', safeListing, 200, {
+        listing: safeListing
       });
     } catch (err) {
       return ApiResponse.error(res, err.message, 404);
@@ -52,9 +56,10 @@ class ListingController {
 
       const landlordId = req.user ? (req.user.landlordId || req.user.userId) : null;
       const listing = await listingService.createListing(landlordId, req.body);
+      const safeListing = serializeListing(listing, true);
 
-      return ApiResponse.success(res, 'Listing created successfully.', listing, 201, {
-        listing
+      return ApiResponse.success(res, 'Listing created successfully.', safeListing, 201, {
+        listing: safeListing
       });
     } catch (err) {
       if (err.statusCode === 403 || err.code === 'LANDLORD_BLOCKED') {
@@ -72,11 +77,12 @@ class ListingController {
       }
 
       const landlordId = req.user ? (req.user.landlordId || req.user.userId) : null;
-      const isAdmin = req.user && (req.user.admin || req.user.role === 'ADMIN');
+      const isAdmin = Boolean(req.user && (req.user.admin || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN'));
       const updated = await listingService.updateListing(req.params.id, landlordId, req.body, isAdmin);
+      const safeUpdated = serializeListing(updated, isAdmin);
 
-      return ApiResponse.success(res, 'Listing updated successfully.', updated, 200, {
-        listing: updated
+      return ApiResponse.success(res, 'Listing updated successfully.', safeUpdated, 200, {
+        listing: safeUpdated
       });
     } catch (err) {
       return ApiResponse.error(res, err.message, 400);

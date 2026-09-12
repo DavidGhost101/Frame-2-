@@ -2,6 +2,7 @@ const authService = require('../services/AuthService');
 const AuthValidator = require('../validators/authValidator');
 const ApiResponse = require('../utils/apiResponse');
 const auditLogRepository = require('../repositories/AuditLogRepository');
+const { serializeUser, serializeLandlord } = require('../utils/securitySanitizer');
 
 class AuthController {
   async requestOtp(req, res, next) {
@@ -18,16 +19,16 @@ class AuthController {
       }
 
       const result = await authService.requestOtp(req.body.phone);
-      return ApiResponse.success(res, result.message, result, 200, {
+      const safeData = {
         phone: result.phone,
         displayPhone: result.displayPhone,
         maskedPhone: result.maskedPhone,
         retryAfter: result.retryAfter,
         cooldownExpiresAt: result.cooldownExpiresAt,
-        otp: result.otp,
-        devOtp: result.devOtp,
-        code: result.code
-      });
+        ...((process.env.NODE_ENV === 'test' || process.env.SMS_DRIVER === 'local') && result.devOtp ? { devOtp: result.devOtp } : {})
+      };
+
+      return ApiResponse.success(res, result.message, safeData, 200, safeData);
     } catch (err) {
       const status = err.statusCode || (err.code === 'OTP_COOLDOWN' ? 429 : 400);
       return res.status(status).json({
@@ -64,25 +65,26 @@ class AuthController {
         consentPhonePublic
       });
 
-      // Set cookies for browser sessions
-      res.cookie('landlordToken', result.accessToken, {
+      // Set secure HTTP-only cookies for browser sessions
+      const cookieOptions = {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 7 * 24 * 60 * 60 * 1000
-      });
+      };
 
-      res.cookie('auth_token', result.accessToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000
-      });
+      res.cookie('landlordToken', result.accessToken, cookieOptions);
+      res.cookie('auth_token', result.accessToken, cookieOptions);
 
-      return ApiResponse.success(res, 'Phone verified and authenticated successfully.', result, 200, {
+      const safeLandlord = serializeLandlord(result.landlord, true);
+      const safeResponse = {
+        authenticated: true,
         token: result.accessToken,
-        landlord: result.landlord
-      });
+        accessToken: result.accessToken,
+        landlord: safeLandlord
+      };
+
+      return ApiResponse.success(res, 'Phone verified and authenticated successfully.', safeResponse, 200, safeResponse);
     } catch (err) {
       const status = err.statusCode || 401;
       return res.status(status).json({
@@ -103,7 +105,24 @@ class AuthController {
       }
 
       const result = await authService.registerUser(req.body);
-      return ApiResponse.success(res, 'User registered successfully.', result, 201);
+      const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      };
+
+      res.cookie('auth_token', result.accessToken, cookieOptions);
+
+      const safeUser = serializeUser(result.user, true);
+      const safeResponse = {
+        user: safeUser,
+        token: result.accessToken,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken
+      };
+
+      return ApiResponse.success(res, 'User registered successfully.', safeResponse, 201, safeResponse);
     } catch (err) {
       next(err);
     }
@@ -122,7 +141,24 @@ class AuthController {
         ipAddress: req.ip
       });
 
-      return ApiResponse.success(res, 'Logged in successfully.', result);
+      const cookieOptions = {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      };
+
+      res.cookie('auth_token', result.accessToken, cookieOptions);
+
+      const safeUser = serializeUser(result.user, true);
+      const safeResponse = {
+        user: safeUser,
+        token: result.accessToken,
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken
+      };
+
+      return ApiResponse.success(res, 'Logged in successfully.', safeResponse, 200, safeResponse);
     } catch (err) {
       return ApiResponse.error(res, err.message, 401);
     }
@@ -167,9 +203,8 @@ class AuthController {
         maxAge: 24 * 60 * 60 * 1000
       });
 
-      const adminEmail = (result.user && result.user.email) || username || process.env.ADMIN_EMAIL || 'admin@rentaroom.co.za';
       await auditLogRepository.logAction({
-        actorEmail: adminEmail,
+        actorEmail: 'admin@system.internal',
         actorRole: 'ADMIN',
         action: 'LOGIN',
         entityType: 'AdminAuth',
@@ -177,22 +212,28 @@ class AuthController {
         status: 'SUCCESS',
         ipAddress,
         userAgent,
-        details: { adminEmail, loginMethod: 'PASSWORD_OR_KEY' }
+        details: { loginMethod: 'SECURE_AUTH' }
       }).catch(() => {});
+
+      const safeAdminUser = {
+        role: 'SUPER_ADMIN',
+        admin: true,
+        fullName: 'Administrator'
+      };
 
       return ApiResponse.success(res, 'Admin authentication successful.', {
         authenticated: true,
         accessToken: result.accessToken,
         token: result.accessToken,
-        user: result.user || { role: 'ADMIN', admin: true, email: adminEmail, fullName: username || 'System Administrator' }
+        user: safeAdminUser
       }, 200, {
         token: result.accessToken,
         authenticated: true,
-        user: result.user
+        user: safeAdminUser
       });
     } catch (err) {
       await auditLogRepository.logAction({
-        actorEmail: username || 'UNKNOWN',
+        actorEmail: 'anonymous',
         actorRole: 'ANONYMOUS',
         action: 'LOGIN',
         entityType: 'AdminAuth',
@@ -201,7 +242,7 @@ class AuthController {
         failureReason: 'INVALID_CREDENTIALS',
         ipAddress,
         userAgent,
-        details: { username: username || null, failureReason: 'INVALID_CREDENTIALS' }
+        details: { failureReason: 'INVALID_CREDENTIALS' }
       }).catch(() => {});
 
       return ApiResponse.error(res, 'Invalid admin credentials. Please check your username and password.', 401);
@@ -216,16 +257,24 @@ class AuthController {
       }
 
       const result = await authService.refreshAccessToken(refreshToken);
-      return ApiResponse.success(res, 'Access token refreshed successfully.', result);
+      return ApiResponse.success(res, 'Access token refreshed successfully.', {
+        accessToken: result.accessToken,
+        token: result.accessToken
+      });
     } catch (err) {
       return ApiResponse.error(res, err.message, 401);
     }
   }
 
   async logout(req, res, next) {
-    res.clearCookie('landlordToken');
-    res.clearCookie('auth_token');
-    res.clearCookie('adminSession');
+    const clearOptions = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax'
+    };
+    res.clearCookie('landlordToken', clearOptions);
+    res.clearCookie('auth_token', clearOptions);
+    res.clearCookie('adminSession', clearOptions);
     return ApiResponse.success(res, 'Logged out successfully.');
   }
 
@@ -233,7 +282,9 @@ class AuthController {
     if (!req.user) {
       return ApiResponse.error(res, 'Not authenticated', 401);
     }
-    return ApiResponse.success(res, 'Profile retrieved', req.user);
+    const isLandlord = req.user.role === 'LANDLORD' || req.user.landlordId;
+    const safeData = isLandlord ? serializeLandlord(req.user, true) : serializeUser(req.user, true);
+    return ApiResponse.success(res, 'Profile retrieved', safeData);
   }
 }
 

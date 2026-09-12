@@ -1,4 +1,5 @@
 const path = require('path');
+const crypto = require('crypto');
 require('dotenv').config();
 
 function sanitizeTimespan(val, fallback) {
@@ -7,11 +8,29 @@ function sanitizeTimespan(val, fallback) {
   return fallback;
 }
 
+// Generate ephemeral random keys for startup fallback if environment variables are not provided
+const runtimeEphemeralJwtSecret = crypto.randomBytes(32).toString('hex');
+const runtimeEphemeralRefreshSecret = crypto.randomBytes(32).toString('hex');
+const runtimeEphemeralAdminKey = crypto.randomBytes(16).toString('hex');
+
 function sanitizeSecret(val, fallback) {
-  if (typeof val === 'string' && val.trim().length >= 8 && !val.includes('replace_with_')) {
+  if (typeof val === 'string' && val.trim().length >= 8 && !val.includes('replace_with_') && !val.includes('dev_super_secret')) {
     return val.trim();
   }
   return fallback;
+}
+
+function sanitizeAdminSecret(val) {
+  if (typeof val === 'string' && val.trim().length >= 6 && !val.includes('replace_with_') && !val.includes('dev_super_secret')) {
+    return val.trim();
+  }
+  return null;
+}
+
+const configuredAdminKey = sanitizeAdminSecret(process.env.ADMIN_KEY) || sanitizeAdminSecret(process.env.ADMIN_PASSWORD);
+
+if (!configuredAdminKey && process.env.NODE_ENV !== 'production') {
+  console.log('[Admin Security] Notice: Ephemeral session active.');
 }
 
 const config = {
@@ -20,14 +39,17 @@ const config = {
   host: process.env.HOST || '0.0.0.0',
   
   jwt: {
-    secret: sanitizeSecret(process.env.JWT_SECRET, 'dev_super_secret_jwt_key_rent_a_room_2026'),
+    secret: sanitizeSecret(process.env.JWT_SECRET, runtimeEphemeralJwtSecret),
     accessExpiresIn: sanitizeTimespan(process.env.JWT_EXPIRES_IN, '2h'),
     refreshExpiresIn: sanitizeTimespan(process.env.JWT_REFRESH_EXPIRES_IN, '7d'),
-    refreshSecret: sanitizeSecret(process.env.JWT_REFRESH_SECRET, 'dev_refresh_secret_key_rent_a_room_2026')
+    refreshSecret: sanitizeSecret(process.env.JWT_REFRESH_SECRET, runtimeEphemeralRefreshSecret)
   },
   
   admin: {
-    key: process.env.ADMIN_KEY || 'Kgutlisiii1!'
+    key: configuredAdminKey || runtimeEphemeralAdminKey,
+    configuredKey: configuredAdminKey,
+    email: process.env.ADMIN_EMAIL || 'admin@rentaroomsoweto.co.za',
+    username: process.env.ADMIN_USERNAME || 'admin'
   },
   
   db: {

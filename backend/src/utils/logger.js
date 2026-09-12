@@ -2,6 +2,8 @@
  * Structured Logger
  */
 
+const { sanitizeForLogging } = require('./securitySanitizer');
+
 const LOG_LEVELS = {
   DEBUG: 0,
   INFO: 1,
@@ -14,11 +16,12 @@ const currentLevel = process.env.NODE_ENV === 'production' ? LOG_LEVELS.INFO : L
 class Logger {
   static formatMessage(level, message, meta = {}) {
     const timestamp = new Date().toISOString();
+    const cleanMeta = sanitizeForLogging(meta);
     return {
       timestamp,
       level,
       message,
-      ...(Object.keys(meta).length ? { meta } : {})
+      ...(cleanMeta && Object.keys(cleanMeta).length ? { meta: cleanMeta } : {})
     };
   }
 

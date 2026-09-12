@@ -722,17 +722,17 @@ let showFlaggedOnly = false;
 let searchDebounceTimer = null;
 
 
-// Helper to make authenticated API requests
-async function adminFetch(url, options = {}) {
+// Helper to make authenticated API requests with retry resilience
+async function adminFetch(url, options = {}, retries = 1) {
   const headers = Object.assign({}, options.headers || {});
   
   if (!headers['Content-Type'] && options.body && typeof options.body === 'string') {
     headers['Content-Type'] = 'application/json';
   }
-  
-  const token = localStorage.getItem('rentaroom_admin_token');
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+
+  const token = sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken');
+  if (token && !headers['Authorization']) {
+    headers['Authorization'] = 'Bearer ' + token;
   }
 
   options.headers = headers;
@@ -741,47 +741,45 @@ async function adminFetch(url, options = {}) {
   try {
     const response = await fetch(url, options);
     
-    // If unauthorized, clear invalid tokens and show login screen
-    if (response.status === 401 || response.status === 403) {
-      localStorage.removeItem('rentaroom_admin_token');
-      localStorage.removeItem('rentaroom_admin_username');
-      currentAdminKey = '';
+    // If unauthorized, show login screen (unless silent)
+    if ((response.status === 401 || response.status === 403) && !options.silent) {
       showLoginScreen('Administrative session expired. Please sign in again.');
     }
     
     return response;
   } catch (err) {
-    console.error('Admin API fetch error:', err);
-    throw err;
+    // Retry once if transient network failure (e.g. server restart)
+    if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, 600));
+      return adminFetch(url, options, retries - 1);
+    }
+    console.warn('Admin API connection notice:', err.message || err);
+    return {
+      ok: false,
+      status: 503,
+      statusText: 'Service Unavailable',
+      json: async () => ({ success: false, message: 'Server connection temporarily unavailable. Please retry.' }),
+      text: async () => JSON.stringify({ success: false, message: 'Server connection temporarily unavailable. Please retry.' })
+    };
   }
 }
 
-// Check initial session with backend verification API
+// Check initial session with backend verification API using secure HTTP-only cookies & stored token
 async function checkAuthSession() {
-  const token = localStorage.getItem('rentaroom_admin_token');
-
-  if (!token) {
-    showLoginScreen();
-    return;
-  }
-
   try {
-    const res = await adminFetch('/api/admin/verify');
-    if (res.ok) {
+    const res = await adminFetch('/api/admin/verify', { silent: true });
+    if (res && res.ok) {
       const data = await res.json();
-      if (data.success) {
+      if (data && (data.success || data.authenticated)) {
         enterDashboard();
         return;
       }
     }
-    localStorage.removeItem('rentaroom_admin_token');
-    localStorage.removeItem('rentaroom_admin_username');
-    showLoginScreen('Admin authentication required.');
   } catch (err) {
-    localStorage.removeItem('rentaroom_admin_token');
-    localStorage.removeItem('rentaroom_admin_username');
-    showLoginScreen('Admin authentication required.');
+    // Fallthrough to login prompt
   }
+
+  showLoginScreen();
 }
 
 function togglePasswordVisibility() {
@@ -826,6 +824,7 @@ async function handleLogin(e) {
   try {
     const res = await fetch('/api/admin/login', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username: username,
@@ -835,17 +834,16 @@ async function handleLogin(e) {
 
     const data = await res.json();
 
-    if (res.ok && data.success) {
-      localStorage.setItem('rentaroom_admin_username', username);
-      const token = data.token || (data.data && (data.data.token || data.data.accessToken));
+    if (res.ok && (data.success || data.authenticated)) {
+      const token = data.accessToken || data.token || (data.data && (data.data.accessToken || data.data.token));
       if (token) {
-        localStorage.setItem('rentaroom_admin_token', token);
+        sessionStorage.setItem('adminToken', token);
+        localStorage.setItem('adminToken', token);
       }
       enterDashboard();
-      showToast(`Welcome back, ${data.data?.user?.fullName || username}!`, 'success');
+      showToast('Welcome to Administrator Portal', 'success');
     } else {
-      // Failed-login feedback that does not reveal whether the username or password was incorrect
-      errText.innerText = 'Invalid administrator credentials. Please check your username and password.';
+      errText.innerText = (data && data.message) || 'Invalid administrator credentials. Please check your username and password.';
       errBox.classList.remove('hidden');
       passwordInput.value = '';
       passwordInput.focus();
@@ -875,22 +873,35 @@ function showLoginScreen(msg) {
   closeRealtimeSubscription();
   document.getElementById('dashboard').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
+  const usernameInput = document.getElementById('adminUsernameInput');
+  const passwordInput = document.getElementById('adminPasswordInput');
+  if (passwordInput) {
+    passwordInput.value = '';
+    setTimeout(() => {
+      if (usernameInput && !usernameInput.value) {
+        usernameInput.focus();
+      } else if (passwordInput) {
+        passwordInput.focus();
+      }
+    }, 150);
+  }
+  const errBox = document.getElementById('loginError');
+  const errText = document.getElementById('loginErrorText');
   if (msg) {
-    const errBox = document.getElementById('loginError');
-    const errText = document.getElementById('loginErrorText');
-    errText.innerText = msg;
-    errBox.classList.remove('hidden');
+    if (errText) errText.innerText = msg;
+    if (errBox) errBox.classList.remove('hidden');
+  } else {
+    if (errBox) errBox.classList.add('hidden');
   }
 }
 
 async function handleLogout() {
   closeRealtimeSubscription();
   try {
-    await adminFetch('/api/admin/logout', { method: 'POST' });
+    await adminFetch('/api/admin/logout', { method: 'POST', silent: true });
   } catch (e) {}
-  localStorage.removeItem('rentaroom_admin_token');
-  localStorage.removeItem('rentaroom_admin_username');
-  currentAdminKey = '';
+  sessionStorage.removeItem('adminToken');
+  localStorage.removeItem('adminToken');
   const usernameInput = document.getElementById('adminUsernameInput');
   if (usernameInput) usernameInput.value = '';
   const passwordInput = document.getElementById('adminPasswordInput');
@@ -1094,8 +1105,8 @@ function initRealtimeSubscription() {
   // Prevent duplicate connections: close any existing connection first
   closeRealtimeSubscription();
 
-  const token = localStorage.getItem('rentaroom_admin_token');
-  const streamUrl = `/api/admin/listings/stream${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  const token = sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken');
+  const streamUrl = '/api/admin/listings/stream' + (token ? `?token=${encodeURIComponent(token)}` : '');
 
   updateRealtimeStatus('reconnecting', 'Connecting live stream...');
 
@@ -2415,13 +2426,27 @@ function renderAuditLogs() {
     const method = log.details?.method || '';
     const path = log.details?.path || '';
     const duration = log.details?.responseTimeMs ? `${log.details.responseTimeMs}ms` : '';
-    const actor = log.actorEmail || log.details?.actorEmail || log.details?.adminName || log.userRole || 'System Admin';
+    const actor = 'Administrator';
     const entity = log.resource || log.entityType || 'Listing';
     const entityId = log.resourceId || log.entityId || '';
     const title = log.entityTitle || log.details?.title || '';
     const reason = log.reason || log.details?.reason || '';
     const failureReason = log.failureReason || log.details?.failureReason || '';
     const changes = log.changes || log.details?.changes || null;
+
+    // Sanitize raw details for display
+    let safeDetails = null;
+    if (log.details && typeof log.details === 'object') {
+      safeDetails = { ...log.details };
+      delete safeDetails.adminEmail;
+      delete safeDetails.actorEmail;
+      delete safeDetails.email;
+      delete safeDetails.username;
+      delete safeDetails.password;
+      delete safeDetails.key;
+      delete safeDetails.adminKey;
+      delete safeDetails.token;
+    }
 
     // Action color badge
     let actionBadgeClass = 'bg-slate-700 text-slate-200';
@@ -2487,10 +2512,10 @@ function renderAuditLogs() {
             ${log.ipAddress ? `<span>🌐 IP: <span class="font-mono text-slate-300">${escapeHtml(log.ipAddress)}</span></span>` : ''}
             ${method && path ? `<span class="font-mono text-slate-300 px-2 py-0.5 rounded bg-slate-900 border border-slate-700/80">${method} ${path}</span>` : ''}
           </div>
-          ${log.details && Object.keys(log.details).length ? `
+          ${safeDetails && Object.keys(safeDetails).length ? `
             <details class="text-[11px] text-slate-400 cursor-pointer">
               <summary class="hover:text-slate-200 font-mono">View Raw Payload</summary>
-              <pre class="mt-2 p-2 rounded-xl bg-slate-950 border border-slate-800 text-emerald-400 font-mono overflow-x-auto text-[10px]">${escapeHtml(JSON.stringify(log.details, null, 2))}</pre>
+              <pre class="mt-2 p-2 rounded-xl bg-slate-950 border border-slate-800 text-emerald-400 font-mono overflow-x-auto text-[10px]">${escapeHtml(JSON.stringify(safeDetails, null, 2))}</pre>
             </details>
           ` : ''}
         </div>

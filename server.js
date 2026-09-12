@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { connectDatabase } = require('./backend/src/database/connection');
 const BackgroundJobRunner = require('./backend/src/jobs/backgroundJobRunner');
+const AdminInitService = require('./backend/src/services/AdminInitService');
 const app = require('./backend/src/app');
 
 // Process-level crash guards to ensure 100% uptime in Cloud Run
@@ -24,6 +25,7 @@ if (require.main === module) {
     try {
       await connectDatabase();
       BackgroundJobRunner.start();
+      await AdminInitService.initialize();
     } catch (e) {
       console.warn('Database initialization notice:', e.message);
     }

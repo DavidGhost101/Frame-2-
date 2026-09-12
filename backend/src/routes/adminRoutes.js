@@ -9,6 +9,7 @@ const userService = require('../services/UserService');
 const roomRequestService = require('../services/RoomRequestService');
 const { requireAdmin } = require('../middleware/authMiddleware');
 const { auditAdminAction } = require('../middleware/auditMiddleware');
+const { authLimiter } = require('../middleware/rateLimiters');
 const auditLogRepository = require('../repositories/AuditLogRepository');
 const fallbackStore = require('../../../services/fallbackStore');
 const ApiResponse = require('../utils/apiResponse');
@@ -17,6 +18,13 @@ const Landlord = require('../models/Landlord');
 const RoomRequest = require('../models/RoomRequest');
 const User = require('../models/User');
 const appEvents = require('../events/eventEmitter');
+const {
+  serializeUser,
+  serializeLandlord,
+  serializeListing,
+  serializeRoomRequest,
+  sanitizeData
+} = require('../utils/securitySanitizer');
 
 // Audit middleware logs all administrative actions to AuditLog collection
 router.use(auditAdminAction);
@@ -24,22 +32,32 @@ router.use(auditAdminAction);
 
 // Public Admin Auth & Verification Endpoints (before requireAdmin middleware)
 
-router.post('/login', authController.adminLogin);
-router.post('/verify', authController.adminLogin);
-router.post('/verify-key', authController.adminLogin);
+router.post('/login', authLimiter, authController.adminLogin);
+router.post('/verify', authLimiter, authController.adminLogin);
+router.post('/verify-key', authLimiter, authController.adminLogin);
 router.post('/logout', authController.logout);
 
 // Session and verification check endpoints (validates session token or x-admin-key header)
 router.get('/session', requireAdmin, (req, res) => {
+  const safeAdmin = {
+    role: (req.user && req.user.role) || 'ADMIN',
+    admin: true,
+    fullName: (req.user && req.user.fullName) || 'System Admin'
+  };
   return ApiResponse.success(res, 'Admin session valid', {
-    user: req.user || { role: 'ADMIN', admin: true, fullName: 'System Admin' },
+    user: safeAdmin,
     authenticated: true
   });
 });
 
 router.get('/verify', requireAdmin, (req, res) => {
+  const safeAdmin = {
+    role: (req.user && req.user.role) || 'ADMIN',
+    admin: true,
+    fullName: (req.user && req.user.fullName) || 'System Admin'
+  };
   return ApiResponse.success(res, 'Admin verification successful', {
-    user: req.user || { role: 'ADMIN', admin: true, fullName: 'System Admin' },
+    user: safeAdmin,
     authenticated: true
   });
 });
@@ -59,7 +77,8 @@ router.get('/listings/stream', requireAdmin, (req, res) => {
 
   const sendSseEvent = (event, data) => {
     try {
-      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      const safeData = sanitizeData(data);
+      res.write(`event: ${event}\ndata: ${JSON.stringify(safeData)}\n\n`);
     } catch (_) {}
   };
 
@@ -246,10 +265,11 @@ router.get('/listings', async (req, res, next) => {
     if (isFlagged) {
       listings = listings.filter(l => l.flagged === true || (l.reportCount && l.reportCount > 0));
     }
-    return ApiResponse.success(res, 'Admin listings retrieved', listings, 200, {
-      listings,
-      count: listings.length,
-      total: result.total || listings.length,
+    const safeListings = listings.map(l => serializeListing(l, true));
+    return ApiResponse.success(res, 'Admin listings retrieved', safeListings, 200, {
+      listings: safeListings,
+      count: safeListings.length,
+      total: result.total || safeListings.length,
       page,
       limit
     });
@@ -261,7 +281,8 @@ router.get('/listings', async (req, res, next) => {
 router.get('/listings/:id', async (req, res, next) => {
   try {
     const listing = await listingService.getListingById(req.params.id);
-    return ApiResponse.success(res, 'Listing details retrieved', listing, 200, { listing });
+    const safeListing = serializeListing(listing, true);
+    return ApiResponse.success(res, 'Listing details retrieved', safeListing, 200, { listing: safeListing });
   } catch (err) {
     next(err);
   }
@@ -326,16 +347,19 @@ router.get('/landlords', adminController.getLandlords);
 
 router.patch('/landlords/:id', async (req, res, next) => {
   try {
-    const { isPaidSubscriber, isBlocked, isPhoneVerified, fullName, phone } = req.body;
+    const { isPaidSubscriber, isBlocked, isPhoneVerified, fullName, phone, address, suburbsCovered } = req.body;
     let updateData = {};
     if (isPaidSubscriber !== undefined) updateData.isPaidSubscriber = Boolean(isPaidSubscriber);
     if (isBlocked !== undefined) updateData.isBlocked = Boolean(isBlocked);
     if (isPhoneVerified !== undefined) updateData.isPhoneVerified = Boolean(isPhoneVerified);
     if (fullName !== undefined) updateData.fullName = fullName;
     if (phone !== undefined) updateData.phone = phone;
+    if (address !== undefined) updateData.address = address;
+    if (suburbsCovered !== undefined) updateData.suburbsCovered = suburbsCovered;
 
-    const landlord = await Landlord.findByIdAndUpdate(req.params.id, updateData, { new: true });
-    return ApiResponse.success(res, 'Landlord updated successfully', landlord, 200, { landlord });
+    const landlord = await adminService.updateLandlord(req.params.id, updateData, req.user);
+    const safeLandlord = serializeLandlord(landlord, true);
+    return ApiResponse.success(res, 'Landlord updated successfully', safeLandlord, 200, { landlord: safeLandlord });
   } catch (err) {
     next(err);
   }
@@ -343,8 +367,19 @@ router.patch('/landlords/:id', async (req, res, next) => {
 
 router.put('/landlords/:id', async (req, res, next) => {
   try {
-    const landlord = await Landlord.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    return ApiResponse.success(res, 'Landlord updated successfully', landlord, 200, { landlord });
+    const { isPaidSubscriber, isBlocked, isPhoneVerified, fullName, phone, address, suburbsCovered } = req.body;
+    const allowedUpdate = {};
+    if (isPaidSubscriber !== undefined) allowedUpdate.isPaidSubscriber = Boolean(isPaidSubscriber);
+    if (isBlocked !== undefined) allowedUpdate.isBlocked = Boolean(isBlocked);
+    if (isPhoneVerified !== undefined) allowedUpdate.isPhoneVerified = Boolean(isPhoneVerified);
+    if (fullName !== undefined) allowedUpdate.fullName = fullName;
+    if (phone !== undefined) allowedUpdate.phone = phone;
+    if (address !== undefined) allowedUpdate.address = address;
+    if (suburbsCovered !== undefined) allowedUpdate.suburbsCovered = suburbsCovered;
+
+    const landlord = await adminService.updateLandlord(req.params.id, allowedUpdate, req.user);
+    const safeLandlord = serializeLandlord(landlord, true);
+    return ApiResponse.success(res, 'Landlord updated successfully', safeLandlord, 200, { landlord: safeLandlord });
   } catch (err) {
     next(err);
   }
@@ -353,11 +388,12 @@ router.put('/landlords/:id', async (req, res, next) => {
 router.put('/landlords/:id/paid', adminController.setLandlordPaid);
 router.put('/landlords/:id/block', adminController.setLandlordBlocked);
 router.post('/landlords/:id/block', adminController.setLandlordBlocked);
+router.post('/landlords/:id/toggle-block', adminController.setLandlordBlocked);
 
 router.delete('/landlords/:id', async (req, res, next) => {
   try {
-    await Landlord.findByIdAndUpdate(req.params.id, { isDeleted: true, isBlocked: true });
-    return ApiResponse.success(res, 'Landlord account deactivated');
+    const deactivated = await adminService.deleteLandlord(req.params.id, req.user);
+    return ApiResponse.success(res, 'Landlord account deactivated', deactivated, 200, { landlord: deactivated });
   } catch (err) {
     next(err);
   }
@@ -369,8 +405,9 @@ router.delete('/landlords/:id', async (req, res, next) => {
 router.get('/users', async (req, res, next) => {
   try {
     const result = await userService.getUsers(req.query);
-    return ApiResponse.success(res, 'Users retrieved successfully', result.users, 200, {
-      users: result.users,
+    const safeUsers = (result.users || []).map(u => serializeUser(u, true));
+    return ApiResponse.success(res, 'Users retrieved successfully', safeUsers, 200, {
+      users: safeUsers,
       total: result.total,
       page: result.page,
       limit: result.limit
@@ -390,7 +427,8 @@ router.patch('/users/:id', async (req, res, next) => {
     if (role !== undefined) {
       user = await userService.updateUserRole(req.params.id, role, req.user);
     }
-    return ApiResponse.success(res, 'User updated successfully', user, 200, { user });
+    const safeUser = serializeUser(user, true);
+    return ApiResponse.success(res, 'User updated successfully', safeUser, 200, { user: safeUser });
   } catch (err) {
     next(err);
   }
@@ -462,23 +500,27 @@ router.delete('/users/:id', async (req, res, next) => {
 });
 
 // ----------------------------------------------------
-// Room Requests Management
+// Room Requests Management (supports both /room-requests and /requests)
 // ----------------------------------------------------
-router.get('/room-requests', async (req, res, next) => {
+const handleGetRequests = async (req, res, next) => {
   try {
     const result = await roomRequestService.getRoomRequests(req.query);
     const requests = result.items || [];
     return ApiResponse.success(res, 'Room requests retrieved successfully', requests, 200, {
       requests,
+      data: requests,
       total: result.total,
       count: requests.length
     });
   } catch (err) {
     next(err);
   }
-});
+};
 
-router.patch('/room-requests/:id', async (req, res, next) => {
+router.get('/room-requests', handleGetRequests);
+router.get('/requests', handleGetRequests);
+
+const handlePatchRequest = async (req, res, next) => {
   try {
     const { status, seekerName, suburb, maxBudget, roomType, notes } = req.body;
     let updateData = {};
@@ -489,37 +531,48 @@ router.patch('/room-requests/:id', async (req, res, next) => {
     if (roomType !== undefined) updateData.roomType = roomType;
     if (notes !== undefined) updateData.notes = notes;
 
-    const request = await RoomRequest.findByIdAndUpdate(req.params.id, updateData, { new: true });
-    return ApiResponse.success(res, 'Room request updated successfully', request, 200, { request });
+    const request = await roomRequestService.updateRoomRequest(req.params.id, updateData, req.user);
+    return ApiResponse.success(res, 'Room request updated successfully', request, 200, { request, data: request });
   } catch (err) {
     next(err);
   }
-});
+};
 
-router.put('/room-requests/:id/status', async (req, res, next) => {
+router.patch('/room-requests/:id', handlePatchRequest);
+router.patch('/requests/:id', handlePatchRequest);
+router.put('/room-requests/:id', handlePatchRequest);
+router.put('/requests/:id', handlePatchRequest);
+
+const handleUpdateRequestStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
     const request = await roomRequestService.updateStatus(req.params.id, status);
-    return ApiResponse.success(res, 'Room request status updated', request, 200, { request });
+    return ApiResponse.success(res, 'Room request status updated', request, 200, { request, data: request });
   } catch (err) {
     next(err);
   }
-});
+};
 
-router.delete('/room-requests/:id', async (req, res, next) => {
+router.put('/room-requests/:id/status', handleUpdateRequestStatus);
+router.put('/requests/:id/status', handleUpdateRequestStatus);
+
+const handleDeleteRequest = async (req, res, next) => {
   try {
     const deleted = await roomRequestService.deleteRoomRequest(req.params.id, req.user);
-    return ApiResponse.success(res, 'Room request removed successfully', deleted, 200, { request: deleted });
+    return ApiResponse.success(res, 'Room request removed successfully', deleted, 200, { request: deleted, data: deleted });
   } catch (err) {
     next(err);
   }
-});
+};
+
+router.delete('/room-requests/:id', handleDeleteRequest);
+router.delete('/requests/:id', handleDeleteRequest);
 
 // Audit Logs & Security Metrics
 router.get('/audit-logs/stats', async (req, res, next) => {
   try {
     const stats = await auditLogRepository.getAuditStats();
-    return ApiResponse.success(res, 'Audit statistics retrieved successfully', stats, 200, { stats });
+    return ApiResponse.success(res, 'Audit statistics retrieved successfully', stats, 200, { stats, data: stats });
   } catch (err) {
     next(err);
   }
@@ -543,11 +596,13 @@ router.get('/audit-logs', async (req, res, next) => {
       result: resultStatus
     });
 
-    const logs = Array.isArray(result) ? result : (result.logs || []);
-    const total = Array.isArray(result) ? result.length : (result.total || logs.length);
+    const logs = Array.isArray(result) ? result : (result.items || result.logs || []);
+    const total = Array.isArray(result) ? result.length : (result.total !== undefined ? result.total : logs.length);
 
     return ApiResponse.success(res, 'Audit logs retrieved successfully', logs, 200, {
       logs,
+      auditLogs: logs,
+      items: logs,
       count: logs.length,
       total,
       page,
@@ -574,8 +629,9 @@ router.get('/messages', async (req, res, next) => {
 
 router.post('/messages/reply', async (req, res, next) => {
   try {
-    let { listingId, tenantId, text, replyText, senderName, messageId } = req.body;
-    text = (text || replyText || '').trim();
+    let { listingId, tenantId, tenantPhone, phone, text, replyText, message: msgBody, senderName, messageId } = req.body;
+    tenantId = tenantId || tenantPhone || phone;
+    text = (text || replyText || msgBody || '').trim();
 
     if ((!listingId || !tenantId) && messageId) {
       const Message = require('../models/Message');

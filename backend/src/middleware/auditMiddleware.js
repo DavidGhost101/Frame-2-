@@ -75,7 +75,7 @@ function deriveAction(req) {
 function sanitizePayload(body) {
   if (!body || typeof body !== 'object') return {};
   const sanitized = { ...body };
-  const sensitiveKeys = ['password', 'adminKey', 'key', 'token', 'secret', 'refreshToken', 'accessToken'];
+  const sensitiveKeys = ['password', 'adminKey', 'key', 'token', 'secret', 'refreshToken', 'accessToken', 'email', 'adminEmail', 'username', 'auth'];
 
   for (const k of Object.keys(sanitized)) {
     if (sensitiveKeys.some(sk => k.toLowerCase().includes(sk.toLowerCase()))) {

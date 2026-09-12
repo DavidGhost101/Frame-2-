@@ -69,6 +69,10 @@ class ListingRepository extends BaseRepository {
 
 
   async getMetrics() {
+    const mongoose = require('mongoose');
+    if (!mongoose.connection || mongoose.connection.readyState !== 1) {
+      throw new Error('Database not connected');
+    }
     const [total, active, pending, flagged] = await Promise.all([
       this.model.countDocuments({ isDeleted: { $ne: true } }),
       this.model.countDocuments({ isDeleted: { $ne: true }, status: 'active' }),

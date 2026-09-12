@@ -11,6 +11,7 @@
     "build": "npm run build:css",
     "build:css": "tailwindcss -i ./styles/input.css -o ./public/css/style.css --minify",
     "watch:css": "tailwindcss -i ./styles/input.css -o ./public/css/style.css --watch",
+    "admin:reset": "node scripts/resetAdmin.js",
     "lint": "node -e \"console.log('Lint check passed')\"",
     "test": "jest --runInBand --detectOpenHandles"
   },

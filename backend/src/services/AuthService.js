@@ -73,9 +73,7 @@ class AuthService {
       maskedPhone: masked,
       cooldownExpiresAt,
       retryAfter: 60,
-      otp,
-      devOtp: otp,
-      code: otp
+      ...(process.env.NODE_ENV === 'test' || process.env.SMS_DRIVER === 'local' ? { devOtp: otp } : {})
     };
   }
 
@@ -336,90 +334,102 @@ class AuthService {
     }
 
     if (!password) {
-      throw new Error('Admin password or security key is required.');
+      const err = new Error('Admin password or security key is required.');
+      err.statusCode = 400;
+      throw err;
     }
 
-    const validKeys = [
-      config.admin && config.admin.key,
-      process.env.ADMIN_KEY,
-      process.env.ADMIN_PASSWORD,
-      'Kgutlisiii1!',
-      'admin123',
-      'password123',
-      'admin',
-      'admin2025',
-      'admin2026',
-      'Admin123!',
-      'soweto_admin_2025',
-      'soweto_admin',
-      'password',
-      'test_admin_key'
-    ].filter(Boolean);
+    let isAuthorized = false;
+    let authenticatedAdmin = null;
 
-    let isAuthorized = validKeys.includes(password);
-
-    // Check if username is configured admin email, admin, etc.
-    const configuredAdminEmail = (process.env.ADMIN_EMAIL || '').toLowerCase();
-    const normalizedUser = (username || '').toLowerCase();
-    const isAdminEmail =
-      (configuredAdminEmail && (normalizedUser === configuredAdminEmail || normalizedUser === configuredAdminEmail.split('@')[0])) ||
-      normalizedUser === 'admin' ||
-      normalizedUser === 'administrator' ||
-      normalizedUser.includes('admin') ||
-      normalizedUser.includes('rakosa') ||
-      normalizedUser.includes('david');
-
-    if (isAdminEmail && validKeys.includes(password)) {
-      isAuthorized = true;
-    }
-
-    // If not matched directly, check if username and password match a User in MongoDB
-    if (!isAuthorized && username) {
+    // 1. Check fallbackStore (in-memory, disk-persisted & cloud-synced)
+    if (fallbackStore && typeof fallbackStore.verifyAdminPassword === 'function') {
       try {
-        const user = await userRepository.findOne({
-          $or: [
-            { email: username.toLowerCase() },
-            { phone: username },
-            { fullName: new RegExp(`^${username}$`, 'i') }
-          ]
-        });
-        if (user && (user.role === ROLES.ADMIN || user.role === ROLES.SUPER_ADMIN || user.admin === true)) {
-          const match = await user.comparePassword(password);
-          if (match) {
-            isAuthorized = true;
+        const verifyResult = fallbackStore.verifyAdminPassword(password, username);
+        if (verifyResult && verifyResult.valid) {
+          isAuthorized = true;
+          authenticatedAdmin = verifyResult.user;
+        }
+      } catch (e) {
+        console.warn('[AuthService] FallbackStore admin verify note:', e.message);
+      }
+    }
+
+    // 2. If username & password are provided and MongoDB is active, check registered admin in MongoDB
+    if (!isAuthorized) {
+      try {
+        const mongoose = require('mongoose');
+        if (mongoose.connection && mongoose.connection.readyState === 1) {
+          const query = username ? {
+            $or: [
+              { email: username.toLowerCase() },
+              { phone: username },
+              { username: username.toLowerCase() }
+            ]
+          } : {
+            role: { $in: [ROLES.ADMIN, ROLES.SUPER_ADMIN] }
+          };
+
+          const user = await userRepository.findOne(query).select('+password');
+          if (user && (user.role === ROLES.ADMIN || user.role === ROLES.SUPER_ADMIN || user.admin === true)) {
+            const match = await user.comparePassword(password);
+            if (match) {
+              isAuthorized = true;
+              authenticatedAdmin = user;
+            }
           }
         }
-      } catch (_) {}
+      } catch (e) {
+        console.warn('[AuthService] MongoDB admin query note:', e.message);
+      }
+    }
+
+    // 3. Fallback: Environment secrets (ADMIN_PASSWORD, ADMIN_KEY, config.admin.key)
+    if (!isAuthorized) {
+      const sanitizedEnvKey = (process.env.ADMIN_KEY && !process.env.ADMIN_KEY.includes('replace_with_')) ? process.env.ADMIN_KEY.trim() : null;
+      const sanitizedEnvPass = (process.env.ADMIN_PASSWORD && !process.env.ADMIN_PASSWORD.includes('replace_with_')) ? process.env.ADMIN_PASSWORD.trim() : null;
+      const validKeys = [
+        sanitizedEnvPass,
+        sanitizedEnvKey,
+        config.admin && config.admin.configuredKey
+      ].filter(k => typeof k === 'string' && k.length >= 6);
+
+      if (validKeys.length > 0 && validKeys.includes(password)) {
+        isAuthorized = true;
+        // Also persist bcrypt hash to fallbackStore so future queries verify with bcrypt
+        if (fallbackStore && typeof fallbackStore.setAdminPassword === 'function') {
+          try {
+            fallbackStore.setAdminPassword(password);
+          } catch (_) {}
+        }
+      }
     }
 
     if (!isAuthorized) {
-      throw new Error('Invalid admin credentials. Please check your username and password.');
+      const err = new Error('Invalid administrator credentials. Please check your username and password.');
+      err.statusCode = 401;
+      throw err;
     }
-
-    const email = username && username.includes('@') ? username.toLowerCase() : (process.env.ADMIN_EMAIL || 'admin@rentaroom.co.za');
-    const adminName = username && username.toLowerCase().includes('david')
-      ? 'David Rakosa (Administrator)'
-      : (username ? `${username} (Administrator)` : 'System Administrator');
 
     const tokenPayload = {
       admin: true,
-      role: ROLES.ADMIN,
-      fullName: adminName,
-      email,
-      username: username || 'admin'
+      role: ROLES.SUPER_ADMIN,
+      userId: authenticatedAdmin ? String(authenticatedAdmin._id) : 'user_001',
+      fullName: 'Administrator'
     };
 
     const accessToken = TokenUtil.generateAccessToken(tokenPayload);
+    const refreshToken = TokenUtil.generateRefreshToken(tokenPayload);
+
     return {
       success: true,
       accessToken,
       token: accessToken,
+      refreshToken,
       user: {
         admin: true,
-        role: ROLES.ADMIN,
-        fullName: adminName,
-        email,
-        username: username || 'admin'
+        role: ROLES.SUPER_ADMIN,
+        fullName: 'Administrator'
       }
     };
   }

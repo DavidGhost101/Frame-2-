@@ -3,6 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const storageService = require('../services/StorageService');
 const ApiResponse = require('../utils/apiResponse');
+const { uploadLimiter } = require('../middleware/rateLimiters');
 
 // Multer in-memory storage (up to 20MB)
 const upload = multer({
@@ -11,16 +12,18 @@ const upload = multer({
     fileSize: 20 * 1024 * 1024 // 20MB limit
   },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
+    const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+    const mime = (file.mimetype || '').toLowerCase();
+    if (allowedMimes.includes(mime)) {
       cb(null, true);
     } else {
-      cb(new Error('Only image files (JPG, PNG, WEBP, GIF) are allowed.'), false);
+      cb(new Error('Only standard image files (JPG, PNG, WEBP, GIF) are allowed. SVG and executable formats are prohibited.'), false);
     }
   }
 });
 
 // Upload listing photo (Multipart file OR base64 payload in JSON)
-router.post('/photo', (req, res, next) => {
+router.post('/photo', uploadLimiter, (req, res, next) => {
   upload.single('photo')(req, res, async (err) => {
     if (err) {
       return ApiResponse.error(res, err.message || 'File upload failed', 400);

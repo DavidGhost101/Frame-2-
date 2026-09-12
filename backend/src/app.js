@@ -14,16 +14,36 @@ const HealthController = require('./controllers/HealthController');
 const app = express();
 app.set('trust proxy', 1);
 
-// Security Headers (configured to allow Turnstile, external images from Unsplash, and Tailwind styles)
+// Security Headers
 app.use(
   helmet({
-    contentSecurityPolicy: false, // Let reverse-proxy / client handle CSP without breaking CDN scripts
-    crossOriginEmbedderPolicy: false
+    contentSecurityPolicy: false, // Turnstile, Google Maps, CDN assets & Tailwind styles
+    crossOriginEmbedderPolicy: false,
+    frameguard: false // Needed for AI Studio preview iframe
   })
 );
 
-// CORS
-app.use(cors({ origin: true, credentials: true }));
+// Security Headers: content-type-options, referrer-policy, permissions-policy
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(self), microphone=(), geolocation=(self)');
+  next();
+});
+
+// CORS: allow all incoming origins, preview domains, iframe contexts, and local origins
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow all origins (reflects incoming origin header to support credentials)
+      callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'X-Requested-With', 'Accept', 'Origin']
+  })
+);
+app.options('*', cors());
 
 // Body parsers (50mb to gracefully accommodate room photo uploads and base64 images)
 app.use(express.json({ limit: '50mb' }));
@@ -32,6 +52,19 @@ app.use(cookieParser());
 
 // Input sanitizer & NoSQL defense
 app.use(requestSanitizer);
+
+// Response-level security interceptor: deeply sanitize all JSON responses
+const { sanitizeData } = require('./utils/securitySanitizer');
+app.use((req, res, next) => {
+  const originalJson = res.json;
+  res.json = function (body) {
+    if (body && typeof body === 'object') {
+      body = sanitizeData(body);
+    }
+    return originalJson.call(this, body);
+  };
+  next();
+});
 
 // General rate limiter on /api
 app.use('/api', apiLimiter);
@@ -47,8 +80,6 @@ app.get('/api/config', (req, res) => {
     rawKey &&
     rawKey !== 'replace_with_turnstile_site_key' &&
     rawKey !== 'replace_with_a_long_random_admin_key' &&
-    rawKey !== 'Kgutlisiii1!' &&
-    rawKey !== 'admin123' &&
     /^[0-9a-zA-Z_-]{10,}$/.test(rawKey) &&
     (rawKey.startsWith('0x') || rawKey.startsWith('1x') || rawKey.startsWith('2x') || rawKey.startsWith('3x'));
 

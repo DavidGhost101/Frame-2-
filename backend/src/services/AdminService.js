@@ -14,31 +14,33 @@ class AdminService {
    */
   async getDashboardStats() {
     try {
-      const [listingMetrics, requestMetrics, landlords] = await Promise.all([
-        listingRepository.getMetrics(),
-        roomRequestRepository.getMetrics(),
-        Landlord.find({ isDeleted: { $ne: true } })
-      ]);
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        const [listingMetrics, requestMetrics, landlords] = await Promise.all([
+          listingRepository.getMetrics(),
+          roomRequestRepository.getMetrics(),
+          Landlord.find({ isDeleted: { $ne: true } })
+        ]);
 
-      const verifiedLandlords = landlords.filter(l => l.isPhoneVerified).length;
-      const activeLandlords = landlords.filter(l => !l.isBlocked).length;
-      const blockedLandlords = landlords.filter(l => l.isBlocked).length;
+        const verifiedLandlords = landlords.filter(l => l.isPhoneVerified).length;
+        const activeLandlords = landlords.filter(l => !l.isBlocked).length;
+        const blockedLandlords = landlords.filter(l => l.isBlocked).length;
 
-      return {
-        listings: listingMetrics,
-        requests: {
-          total: requestMetrics.total,
-          active: requestMetrics.active
-        },
-        landlords: {
-          total: landlords.length,
-          verified: verifiedLandlords,
-          active: activeLandlords,
-          blocked: blockedLandlords
-        }
-      };
+        return {
+          listings: listingMetrics,
+          requests: {
+            total: requestMetrics.total,
+            active: requestMetrics.active
+          },
+          landlords: {
+            total: landlords.length,
+            verified: verifiedLandlords,
+            active: activeLandlords,
+            blocked: blockedLandlords
+          }
+        };
+      }
+      throw new Error('Database not connected, using fallbackStore');
     } catch (err) {
-      console.warn('Dashboard stats fallback:', err.message);
       const fbListings = fallbackStore.fallbackListings || [];
       const fbRequests = (fallbackStore.fallbackRequests || []).filter(r => !r.isDeleted && r.status !== 'archived');
       const fbLandlords = fallbackStore.fallbackLandlords || [];
@@ -69,29 +71,23 @@ class AdminService {
    */
   async getLandlords() {
     try {
-      const landlords = await userRepository.findAllLandlords();
-      if (!landlords || !landlords.length) {
-        const fbListings = fallbackStore.fallbackListings || [];
-        return (fallbackStore.fallbackLandlords || []).map(l => ({
-          ...l,
-          listingCount: fbListings.filter(item => {
-            const lId = item.landlordId && (item.landlordId._id || item.landlordId);
-            return String(lId) === String(l._id);
-          }).length
-        }));
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        const landlords = await userRepository.findAllLandlords();
+        if (landlords && landlords.length) {
+          const results = await Promise.all(
+            landlords.map(async (l) => {
+              const listingCount = await Listing.countDocuments({ landlordId: l._id, isDeleted: { $ne: true } }).catch(() => 0);
+              return {
+                ...(typeof l.toObject === 'function' ? l.toObject() : l),
+                listingCount
+              };
+            })
+          );
+          return results;
+        }
       }
-      const results = await Promise.all(
-        landlords.map(async (l) => {
-          const listingCount = await Listing.countDocuments({ landlordId: l._id, isDeleted: { $ne: true } }).catch(() => 0);
-          return {
-            ...(typeof l.toObject === 'function' ? l.toObject() : l),
-            listingCount
-          };
-        })
-      );
-      return results;
+      throw new Error('Database not connected, using fallbackStore');
     } catch (err) {
-      console.warn('GetLandlords fallback:', err.message);
       const fbListings = fallbackStore.fallbackListings || [];
       return (fallbackStore.fallbackLandlords || []).map(l => ({
         ...l,
@@ -214,6 +210,96 @@ class AdminService {
     } catch (_) {}
 
     return landlord;
+  }
+
+  /**
+   * Update landlord details (handles MongoDB and in-memory store)
+   */
+  async updateLandlord(landlordId, updateData = {}, adminUser = null) {
+    let landlord = null;
+
+    if (mongoose.Types.ObjectId.isValid(landlordId)) {
+      try {
+        landlord = await Landlord.findByIdAndUpdate(landlordId, updateData, { new: true });
+      } catch (err) {
+        console.warn('DB updateLandlord warning:', err.message);
+      }
+    }
+
+    if (fallbackStore && fallbackStore.fallbackLandlords) {
+      const fbL = fallbackStore.fallbackLandlords.find(l => String(l._id) === String(landlordId));
+      if (fbL) {
+        Object.assign(fbL, updateData);
+        if (typeof fallbackStore.saveStore === 'function') {
+          try { fallbackStore.saveStore(); } catch (_) {}
+        }
+        if (!landlord) landlord = fbL;
+      }
+    }
+
+    if (!landlord) {
+      throw new Error(`Landlord with ID ${landlordId} not found.`);
+    }
+
+    if (adminUser) {
+      await auditLogRepository.logAction({
+        userId: adminUser.userId || adminUser._id,
+        userRole: adminUser.role || 'ADMIN',
+        action: 'UPDATE_LANDLORD',
+        resource: 'Landlord',
+        resourceId: landlordId,
+        details: updateData
+      }).catch(() => {});
+    }
+
+    try {
+      appEvents.emit('landlord:updated', {
+        landlord,
+        landlordId: String(landlordId),
+        isBlocked: landlord.isBlocked
+      });
+    } catch (_) {}
+
+    return landlord;
+  }
+
+  /**
+   * Deactivate/delete landlord account
+   */
+  async deleteLandlord(landlordId, adminUser = null) {
+    let landlord = null;
+
+    if (mongoose.Types.ObjectId.isValid(landlordId)) {
+      try {
+        landlord = await Landlord.findByIdAndUpdate(landlordId, { isDeleted: true, isBlocked: true }, { new: true });
+      } catch (err) {
+        console.warn('DB deleteLandlord warning:', err.message);
+      }
+    }
+
+    if (fallbackStore && fallbackStore.fallbackLandlords) {
+      const fbL = fallbackStore.fallbackLandlords.find(l => String(l._id) === String(landlordId));
+      if (fbL) {
+        fbL.isDeleted = true;
+        fbL.isBlocked = true;
+        if (typeof fallbackStore.saveStore === 'function') {
+          try { fallbackStore.saveStore(); } catch (_) {}
+        }
+        if (!landlord) landlord = fbL;
+      }
+    }
+
+    if (adminUser) {
+      await auditLogRepository.logAction({
+        userId: adminUser.userId || adminUser._id,
+        userRole: adminUser.role || 'ADMIN',
+        action: 'DELETE_LANDLORD',
+        resource: 'Landlord',
+        resourceId: landlordId
+      }).catch(() => {});
+    }
+
+    return landlord || { id: landlordId, isDeleted: true, isBlocked: true };
   }
 
   /**

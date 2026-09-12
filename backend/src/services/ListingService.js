@@ -16,7 +16,7 @@ setInterval(() => {
   for (const [key, val] of recentListingSubmissions.entries()) {
     if (val.timestamp < cutoff) recentListingSubmissions.delete(key);
   }
-}, 60000);
+}, 60000).unref();
 
 class ListingService {
   /**
@@ -467,6 +467,19 @@ class ListingService {
       }
     }
 
+    // Ensure listing always has a valid working room picture
+    const defaultRoomImages = {
+      'Ensuite': '/images/township_ensuite.jpg',
+      'Backroom': '/images/township_backroom.jpg',
+      'Garage': '/images/converted_garage.jpg',
+      'Student Accommodation': '/images/student_room.jpg',
+      'Apartment': '/images/township_ensuite.jpg',
+      'Flatlet': '/images/converted_garage.jpg'
+    };
+    if (!listingData.image || !listingData.image.trim()) {
+      listingData.image = defaultRoomImages[listingData.propertyType] || '/images/township_backroom.jpg';
+    }
+
     // When a landlord posts a room, it enters pending_review. Once admin approves it, it is published to the public portal.
     const initialStatus = listingData.status === 'active' ? 'active' : 'pending_review';
     const initialPubStatus = initialStatus === 'active' ? 'PUBLISHED' : 'PENDING';
@@ -718,8 +731,12 @@ class ListingService {
       throw new Error('Listing not found.');
     }
 
-    if (!isAdmin && listing.landlordId.toString() !== landlordId.toString()) {
-      throw new Error('You are not authorized to update this listing.');
+    const lIdStr = listing.landlordId ? (listing.landlordId._id || listing.landlordId).toString() : null;
+    const reqLandlordIdStr = landlordId ? (landlordId._id || landlordId).toString() : null;
+    if (!isAdmin && (!reqLandlordIdStr || lIdStr !== reqLandlordIdStr)) {
+      const err = new Error('You are not authorized to update this listing.');
+      err.statusCode = 403;
+      throw err;
     }
 
     const updated = await listingRepository.updateById(id, updateData);
@@ -754,6 +771,15 @@ class ListingService {
     } catch (_) {}
 
     if (!listing && fallbackStore && typeof fallbackStore.deleteListing === 'function') {
+      const fbItem = (fallbackStore.fallbackListings || []).find(l => String(l._id) === String(id));
+      if (fbItem) {
+        const itemLandlordId = fbItem.landlordId && (fbItem.landlordId._id || fbItem.landlordId);
+        if (!isAdmin && (!landlordId || String(itemLandlordId) !== String(landlordId))) {
+          const err = new Error('You are not authorized to delete this listing.');
+          err.statusCode = 403;
+          throw err;
+        }
+      }
       const fbDeleted = fallbackStore.deleteListing(id);
       if (fbDeleted) {
         try {
@@ -767,8 +793,12 @@ class ListingService {
       throw new Error('Listing not found.');
     }
 
-    if (!isAdmin && listing.landlordId.toString() !== landlordId.toString()) {
-      throw new Error('You are not authorized to delete this listing.');
+    const lIdStr = listing.landlordId ? (listing.landlordId._id || listing.landlordId).toString() : null;
+    const reqLandlordIdStr = landlordId ? (landlordId._id || landlordId).toString() : null;
+    if (!isAdmin && (!reqLandlordIdStr || lIdStr !== reqLandlordIdStr)) {
+      const err = new Error('You are not authorized to delete this listing.');
+      err.statusCode = 403;
+      throw err;
     }
 
     await listingRepository.softDelete(id);
@@ -822,20 +852,22 @@ class ListingService {
    */
   async getListingMessages(listingId, tenantId) {
     try {
-      const query = { listingId };
-      if (tenantId) {
-        query.tenantId = tenantId;
-      }
-      const messages = await Message.find(query).sort({ createdAt: 1 }).lean();
-      if (messages && messages.length > 0) {
-        return messages;
+      const mongoose = require('mongoose');
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        const query = { listingId };
+        if (tenantId) {
+          query.tenantId = tenantId;
+        }
+        const messages = await Message.find(query).sort({ createdAt: 1 }).lean();
+        if (messages && messages.length > 0) {
+          return messages;
+        }
       }
       if (fallbackStore && typeof fallbackStore.getMessagesByListingAndTenant === 'function') {
         return fallbackStore.getMessagesByListingAndTenant(listingId, tenantId);
       }
       return [];
     } catch (err) {
-      console.warn('Message DB fetch fallback:', err.message);
       if (fallbackStore && typeof fallbackStore.getMessagesByListingAndTenant === 'function') {
         return fallbackStore.getMessagesByListingAndTenant(listingId, tenantId);
       }
@@ -878,11 +910,17 @@ class ListingService {
     };
 
     let savedMessage = null;
-    try {
-      const doc = await Message.create(messageData);
-      savedMessage = doc.toObject();
-    } catch (err) {
-      console.warn('Message DB save fallback:', err.message);
+    const mongoose = require('mongoose');
+    if (mongoose.connection && mongoose.connection.readyState === 1) {
+      try {
+        const doc = await Message.create(messageData);
+        savedMessage = doc.toObject();
+      } catch (err) {
+        console.warn('Message DB save fallback:', err.message);
+      }
+    }
+
+    if (!savedMessage) {
       if (fallbackStore && typeof fallbackStore.addMessage === 'function') {
         savedMessage = fallbackStore.addMessage(messageData);
       } else {
@@ -923,9 +961,11 @@ class ListingService {
             if (fallbackStore && typeof fallbackStore.addMessage === 'function') {
               fallbackStore.addMessage(replyData);
             }
-            try {
-              await Message.create(replyData);
-            } catch (_) {}
+            if (mongoose.connection && mongoose.connection.readyState === 1) {
+              try {
+                await Message.create(replyData);
+              } catch (_) {}
+            }
           } catch (_) {}
         }, 1200);
       }
@@ -939,8 +979,11 @@ class ListingService {
    */
   async getAllMessages(limit = 100) {
     try {
-      const messages = await Message.find().sort({ createdAt: -1 }).limit(limit).lean();
-      if (messages && messages.length > 0) return messages;
+      const mongoose = require('mongoose');
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        const messages = await Message.find().sort({ createdAt: -1 }).limit(limit).lean();
+        if (messages && messages.length > 0) return messages;
+      }
       if (fallbackStore && typeof fallbackStore.getAllMessages === 'function') {
         return fallbackStore.getAllMessages(limit);
       }

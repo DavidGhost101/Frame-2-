@@ -15,7 +15,17 @@ try {
 }
 
 const PROJECT_ID = process.env.FIREBASE_PROJECT_ID || firebaseConfig.projectId || 'intricate-crowbar-nnm9t';
-const BUCKET_NAME = process.env.FIREBASE_STORAGE_BUCKET || firebaseConfig.storageBucket || `${PROJECT_ID}.firebasestorage.app`;
+function resolveBucketName() {
+  const envBucket = (process.env.FIREBASE_STORAGE_BUCKET || '').trim();
+  if (envBucket && /^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$/.test(envBucket)) {
+    return envBucket;
+  }
+  if (firebaseConfig.storageBucket && /^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$/.test(firebaseConfig.storageBucket)) {
+    return firebaseConfig.storageBucket;
+  }
+  return `${PROJECT_ID}.firebasestorage.app`;
+}
+const BUCKET_NAME = resolveBucketName();
 
 class StorageService {
   constructor() {
@@ -28,9 +38,7 @@ class StorageService {
 
   initStorage() {
     try {
-      // Validate bucket name syntax: must be non-empty lowercase DNS string
       if (!this.bucketName || !/^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$/.test(this.bucketName)) {
-        console.log(`[StorageService] Invalid or non-standard bucket name '${this.bucketName}', using resilient local storage`);
         this.bucket = null;
         return;
       }
@@ -72,15 +80,50 @@ class StorageService {
       throw new Error('Invalid file buffer provided for upload.');
     }
 
-    // Determine extension
+    // Magic-byte inspection & validation to prevent forged files, SVGs, scripts, or executables
+    let detectedMime = 'image/jpeg';
     let ext = 'jpg';
-    if (mimeType.includes('png')) ext = 'png';
-    else if (mimeType.includes('webp')) ext = 'webp';
-    else if (mimeType.includes('gif')) ext = 'gif';
+
+    if (buffer.length < 12) {
+      throw new Error('Image data is too small to be a valid photo.');
+    }
+
+    // JPEG: FF D8 FF
+    if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+      detectedMime = 'image/jpeg';
+      ext = 'jpg';
+    }
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    else if (
+      buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47 &&
+      buffer[4] === 0x0D && buffer[5] === 0x0A && buffer[6] === 0x1A && buffer[7] === 0x0A
+    ) {
+      detectedMime = 'image/png';
+      ext = 'png';
+    }
+    // GIF: 47 49 46 38 ('GIF8')
+    else if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) {
+      detectedMime = 'image/gif';
+      ext = 'gif';
+    }
+    // WEBP: RIFF .... WEBP
+    else if (
+      buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+      buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50
+    ) {
+      detectedMime = 'image/webp';
+      ext = 'webp';
+    } else {
+      // Check if client provided SVG or other prohibited format
+      throw new Error('Invalid or unsupported image file. Only standard image files (JPG, PNG, WEBP, GIF) are permitted.');
+    }
+
+    // Sanitize folder path to prevent path traversal
+    const safeFolder = ['listings', 'avatars', 'general'].includes(folder) ? folder : 'listings';
 
     const uniqueId = crypto.randomBytes(12).toString('hex');
     const filename = `${Date.now()}_${uniqueId}.${ext}`;
-    const storagePath = `${folder}/${filename}`;
+    const storagePath = `${safeFolder}/${filename}`;
     const downloadToken = crypto.randomUUID();
 
     // 1. Attempt upload to Firebase Storage with quick timeout
@@ -90,7 +133,7 @@ class StorageService {
         
         await this.withTimeout(file.save(buffer, {
           metadata: {
-            contentType: mimeType,
+            contentType: detectedMime,
             cacheControl: 'public, max-age=31536000',
             metadata: {
               firebaseStorageDownloadTokens: downloadToken,

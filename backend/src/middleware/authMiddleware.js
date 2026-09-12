@@ -115,23 +115,13 @@ function requireAdmin(req, res, next) {
 
   // Also check admin API key in headers or query if provided for server-to-server or SSE
   const providedAdminKey = req.headers['x-admin-key'] || (req.query && (req.query.key || req.query.adminKey));
-  if (
-    providedAdminKey &&
-    (providedAdminKey === config.admin.key ||
-      providedAdminKey === process.env.ADMIN_KEY ||
-      providedAdminKey === process.env.ADMIN_PASSWORD ||
-      providedAdminKey === 'Kgutlisiii1!' ||
-      providedAdminKey === 'admin123' ||
-      providedAdminKey === 'password123' ||
-      providedAdminKey === 'admin' ||
-      providedAdminKey === 'admin2025' ||
-      providedAdminKey === 'admin2026' ||
-      providedAdminKey === 'Admin123!' ||
-      providedAdminKey === 'soweto_admin_2025' ||
-      providedAdminKey === 'soweto_admin' ||
-      providedAdminKey === 'password' ||
-      providedAdminKey === 'test_admin_key')
-  ) {
+  const validAdminKeys = [
+    config.admin && config.admin.key,
+    process.env.ADMIN_KEY,
+    process.env.ADMIN_PASSWORD
+  ].filter(k => typeof k === 'string' && k.length >= 6 && !k.includes('replace_with_'));
+
+  if (providedAdminKey && validAdminKeys.length > 0 && validAdminKeys.includes(providedAdminKey)) {
     req.user = { role: ROLES.ADMIN, admin: true, fullName: 'System Admin' };
     return next();
   }
