@@ -7,3 +7,4 @@ coverage/
 *.key
 service-account*.json
 .firebase*
+demo/dist/

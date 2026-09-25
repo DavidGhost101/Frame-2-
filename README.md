@@ -139,6 +139,31 @@ a manual admin action.
   without it being hardcoded into the HTML.
 - **Landlord "my listings"** endpoint (`GET /api/listings/mine`).
 
+## Run it as plain HTML (demo mode)
+
+```bash
+npm run build:demo
+```
+
+This writes a static copy of the site to `demo/dist/`: `index.html` (the public
+site), `admin.html` (the dashboard), plus the CSS, JS and photos. Open it on any
+static host. `demo/demo-api.js` answers every `/api/...` call inside the browser
+from localStorage, so there is no Node server, no MongoDB and no connection to the
+live Firestore database. It ships with the built-in sample listings, verification
+codes appear on screen, and the admin login is `admin` / `demo`. The real app in
+`public/` is unchanged.
+
+## Running locally without touching the live database
+
+On startup the server syncs with the Cloud Firestore database named in
+`firebase-applet-config.json`. That includes sending deletes for listings it has
+marked as removed. To run the server locally or in CI without reading from or
+writing to that database, set:
+
+```bash
+DISABLE_CLOUD_SYNC=true
+```
+
 ## Local setup
 
 ```bash

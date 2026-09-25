@@ -102,7 +102,8 @@ class PersistentStore {
     this.isSyncing = false;
     this.deletedListingIds = new Set();
     this.deletedRequestIds = new Set();
-    this.firestoreEnabled = Boolean(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.firestoreDatabaseId) && process.env.NODE_ENV !== 'test';
+    this.firestoreEnabled = Boolean(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.firestoreDatabaseId) && process.env.NODE_ENV !== 'test'
+      && process.env.DISABLE_CLOUD_SYNC !== 'true'; // set to run locally without touching the live database
     if (this.firestoreEnabled) {
       console.log(`[PersistentStore] Cloud Firestore persistence active for database: ${firebaseConfig.firestoreDatabaseId}`);
     } else {
