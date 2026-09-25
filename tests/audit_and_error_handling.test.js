@@ -1,3 +1,5 @@
+process.env.NODE_ENV = 'test';
+
 const request = require('supertest');
 const app = require('../backend/src/app');
 const auditLogRepository = require('../backend/src/repositories/AuditLogRepository');

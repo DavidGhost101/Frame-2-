@@ -70,7 +70,7 @@ Answer user questions helpfully, politely, and accurately with practical South A
       try {
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('AI generation timeout')), 3000));
         const aiPromise = this.ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.8-flash',
           contents: `${systemPrompt}\n\nUser Question: ${cleanQuery}`
         });
 
@@ -78,7 +78,7 @@ Answer user questions helpfully, politely, and accurately with practical South A
 
         return {
           answer: response.text,
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.8-flash',
           grounded: true
         };
       } catch (err) {

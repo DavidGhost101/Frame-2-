@@ -169,8 +169,10 @@ async function checkNotBlocked(req, res, next) {
       return ApiResponse.error(res, 'This account has been blocked from posting or editing listings.', 403, [], 'LANDLORD_BLOCKED');
     }
 
-    // 2. Check User record in database
-    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+    const isDbConnected = mongoose.connection && mongoose.connection.readyState === 1;
+
+    // 2. Check User record in database (only if database connection is active)
+    if (isDbConnected && userId && mongoose.Types.ObjectId.isValid(userId)) {
       try {
         const userDoc = await User.findById(userId).select('status role isBlocked');
         if (userDoc && (userDoc.status === 'blocked' || userDoc.status === 'suspended' || userDoc.isBlocked === true)) {
@@ -179,8 +181,8 @@ async function checkNotBlocked(req, res, next) {
       } catch (_) {}
     }
 
-    // 3. Check Landlord record in database
-    if (landlordId && mongoose.Types.ObjectId.isValid(landlordId)) {
+    // 3. Check Landlord record in database (only if database connection is active)
+    if (isDbConnected && landlordId && mongoose.Types.ObjectId.isValid(landlordId)) {
       try {
         const landlordDoc = await Landlord.findById(landlordId).select('isBlocked');
         if (landlordDoc && landlordDoc.isBlocked === true) {
@@ -196,15 +198,17 @@ async function checkNotBlocked(req, res, next) {
       const local = val.localNormalized || phone;
       const queryPhones = [phone, canonical, local].filter(Boolean);
 
-      try {
-        const [blockedLandlord, blockedUser] = await Promise.all([
-          Landlord.findOne({ phone: { $in: queryPhones }, isBlocked: true }),
-          User.findOne({ phone: { $in: queryPhones }, status: { $in: ['blocked', 'suspended'] } })
-        ]);
-        if (blockedLandlord || blockedUser) {
-          return ApiResponse.error(res, 'This account has been blocked from posting or editing listings.', 403, [], 'LANDLORD_BLOCKED');
-        }
-      } catch (_) {}
+      if (isDbConnected) {
+        try {
+          const [blockedLandlord, blockedUser] = await Promise.all([
+            Landlord.findOne({ phone: { $in: queryPhones }, isBlocked: true }),
+            User.findOne({ phone: { $in: queryPhones }, status: { $in: ['blocked', 'suspended'] } })
+          ]);
+          if (blockedLandlord || blockedUser) {
+            return ApiResponse.error(res, 'This account has been blocked from posting or editing listings.', 403, [], 'LANDLORD_BLOCKED');
+          }
+        } catch (_) {}
+      }
 
       // Fallback store check
       if (fallbackStore) {
