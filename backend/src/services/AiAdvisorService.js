@@ -2,6 +2,7 @@ const { GoogleGenAI } = require('@google/genai');
 const config = require('../config');
 const listingRepository = require('../repositories/ListingRepository');
 const fallbackStore = require('../../../services/fallbackStore');
+const { aiSecurityGate } = require('../security/aiSecurityGate');
 
 class AiAdvisorService {
   constructor() {
@@ -23,7 +24,19 @@ class AiAdvisorService {
       throw new Error('Query string is required.');
     }
 
-    // Retrieve active listings for real context
+    // 1. AI Security Gate: Prompt Injection & Jailbreak Defense
+    const promptCheck = aiSecurityGate.sanitizePrompt(userQuery);
+    if (promptCheck.flagged) {
+      return {
+        answer: promptCheck.safeText,
+        model: 'security_gate_refusal',
+        grounded: true,
+        securityFlagged: true
+      };
+    }
+    const cleanQuery = promptCheck.safeText;
+
+    // 2. Retrieve active listings for context
     let listings = [];
     try {
       listings = await listingRepository.find({ status: 'active' }, 'title suburb monthlyRent propertyType amenities', { limit: 12 });
@@ -31,7 +44,10 @@ class AiAdvisorService {
       listings = fallbackStore.fallbackListings || [];
     }
 
-    const listingSummaries = listings.map(l => 
+    // 3. AI Data Boundary: Scrub any potential PII or sensitive keys before injecting into AI prompt
+    const scrubbedListings = aiSecurityGate.scrubContextData(listings);
+
+    const listingSummaries = scrubbedListings.map(l => 
       `- ${l.title} in ${l.suburb} (R${l.monthlyRent}/mo, ${l.propertyType}, Amenities: ${l.amenities ? l.amenities.join(', ') : 'None'})`
     ).join('\n');
 
@@ -54,15 +70,15 @@ Answer user questions helpfully, politely, and accurately with practical South A
       try {
         const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('AI generation timeout')), 3000));
         const aiPromise = this.ai.models.generateContent({
-          model: 'gemini-3.7-flash',
-          contents: `${systemPrompt}\n\nUser Question: ${userQuery}`
+          model: 'gemini-2.5-flash',
+          contents: `${systemPrompt}\n\nUser Question: ${cleanQuery}`
         });
 
         const response = await Promise.race([aiPromise, timeoutPromise]);
 
         return {
           answer: response.text,
-          model: 'gemini-3.7-flash',
+          model: 'gemini-2.5-flash',
           grounded: true
         };
       } catch (err) {
@@ -71,7 +87,7 @@ Answer user questions helpfully, politely, and accurately with practical South A
     }
 
     // Contextual local rule-based fallback if API key is not present or offline
-    const q = userQuery.toLowerCase();
+    const q = cleanQuery.toLowerCase();
     let answer = '';
 
     if (q.includes('uj') || q.includes('student') || q.includes('campus')) {

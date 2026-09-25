@@ -10,6 +10,8 @@ const SENSITIVE_DENYLIST = [
   'password',
   'passwordhash',
   'hashedpassword',
+  'adminpassword',
+  'hash',
   'salt',
   'resettoken',
   'resetpasswordtoken',
@@ -22,18 +24,25 @@ const SENSITIVE_DENYLIST = [
   'otpcode',
   'otpsecret',
   'jwtsecret',
+  'sessionsecret',
   'apikey',
   'apisecret',
   'secret',
   'privatekey',
   'encryptionkey',
+  'databaseurl',
+  'connectionstring',
+  'claudekey',
+  'geminikey',
+  'credential',
+  'credentials',
   'internalauthemail'
 ];
 
 const SENSITIVE_SET = new Set(SENSITIVE_DENYLIST);
 
-// Pattern to catch variants like "adminApiKey", "userPasswordHash", etc.
-const SENSITIVE_REGEX = /^(password|passwordhash|hashedpassword|salt|resettoken|resetpasswordtoken|passwordresettoken|verificationtoken|emailverificationtoken|otp|otpcode|otpsecret|jwtsecret|apikey|apisecret|privatekey|encryptionkey)$/i;
+// Pattern to catch variants like "adminApiKey", "userPasswordHash", "databaseUrl", etc.
+const SENSITIVE_REGEX = /^(password|passwordhash|hashedpassword|adminpassword|hash|salt|resettoken|resetpasswordtoken|passwordresettoken|verificationtoken|emailverificationtoken|otp|otpcode|otpsecret|jwtsecret|sessionsecret|apikey|apisecret|privatekey|encryptionkey|databaseurl|connectionstring|claudekey|geminikey|credential|credentials)$/i;
 
 /**
  * Checks if a given property key is sensitive

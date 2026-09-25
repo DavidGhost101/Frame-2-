@@ -4,12 +4,17 @@ const ApiResponse = require('../utils/apiResponse');
 const { toWhatsAppNumber, buildWhatsAppLinks } = require('../utils/phoneUtils');
 const fallbackStore = require('../../../services/fallbackStore');
 const { serializeListing } = require('../utils/securitySanitizer');
+const auditLogRepository = require('../repositories/AuditLogRepository');
 
 class ListingController {
   async getListings(req, res, next) {
     try {
       const isPrivileged = Boolean(req.user && (req.user.admin || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN'));
-      const result = await listingService.getListings(req.query);
+      const query = { ...req.query };
+      if (!isPrivileged) {
+        delete query.status;
+      }
+      const result = await listingService.getListings(query, isPrivileged);
       const safeItems = (result.items || []).map(item => serializeListing(item, isPrivileged));
       return ApiResponse.paginated(
         res,
@@ -28,13 +33,14 @@ class ListingController {
   async getListingById(req, res, next) {
     try {
       const isPrivileged = Boolean(req.user && (req.user.admin || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN'));
-      const listing = await listingService.getListingById(req.params.id);
+      const listing = await listingService.getListingById(req.params.id, isPrivileged);
       const safeListing = serializeListing(listing, isPrivileged);
       return ApiResponse.success(res, 'Listing retrieved successfully', safeListing, 200, {
         listing: safeListing
       });
     } catch (err) {
-      return ApiResponse.error(res, err.message, 404);
+      const statusCode = err.statusCode || 404;
+      return ApiResponse.error(res, err.message, statusCode);
     }
   }
 
@@ -54,9 +60,38 @@ class ListingController {
         return ApiResponse.error(res, 'Validation error', 400, validation.errors);
       }
 
+      const isAdmin = Boolean(req.user && (req.user.admin || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN'));
+      if (!isAdmin) {
+        delete req.body.status;
+        delete req.body.publicationStatus;
+        delete req.body.isApproved;
+        delete req.body.approvedBy;
+        delete req.body.approvedAt;
+      }
+
       const landlordId = req.user ? (req.user.landlordId || req.user.userId) : null;
       const listing = await listingService.createListing(landlordId, req.body);
       const safeListing = serializeListing(listing, true);
+
+      auditLogRepository.logAction({
+        userId: landlordId,
+        actorId: landlordId,
+        actorEmail: req.user ? req.user.email : (req.body.phone || 'anonymous_landlord'),
+        actorRole: req.user ? (req.user.role || 'LANDLORD') : 'LANDLORD',
+        action: 'ROOM_CREATED',
+        category: 'ROOM',
+        resource: 'Listing',
+        resourceId: String(safeListing._id),
+        status: 'SUCCESS',
+        result: 'SUCCESS',
+        ipAddress: req.ip,
+        requestId: req.id,
+        details: {
+          title: safeListing.title,
+          suburb: safeListing.suburb,
+          monthlyRent: safeListing.monthlyRent
+        }
+      }).catch(() => {});
 
       return ApiResponse.success(res, 'Listing created successfully.', safeListing, 201, {
         listing: safeListing
@@ -64,6 +99,9 @@ class ListingController {
     } catch (err) {
       if (err.statusCode === 403 || err.code === 'LANDLORD_BLOCKED') {
         return ApiResponse.error(res, err.message, 403, [], 'LANDLORD_BLOCKED');
+      }
+      if (err.statusCode === 409 || err.code === 'DUPLICATE_SUBMISSION') {
+        return ApiResponse.error(res, err.message, 409, [err.message], 'DUPLICATE_SUBMISSION');
       }
       next(err);
     }
@@ -76,28 +114,80 @@ class ListingController {
         return ApiResponse.error(res, 'Validation error', 400, validation.errors);
       }
 
-      const landlordId = req.user ? (req.user.landlordId || req.user.userId) : null;
+      const landlordId = req.user ? (req.user.landlordId || req.user.userId || req.user._id) : null;
       const isAdmin = Boolean(req.user && (req.user.admin || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN'));
+
+      // Strict Privilege Separation: Non-admins cannot manipulate administrative moderation or ownership fields
+      if (!isAdmin) {
+        delete req.body.status;
+        delete req.body.publicationStatus;
+        delete req.body.isApproved;
+        delete req.body.approvedBy;
+        delete req.body.approvedAt;
+        delete req.body.rejectionReason;
+        delete req.body.flagged;
+        delete req.body.flagReasons;
+        delete req.body.reportCount;
+        delete req.body.landlordId;
+        delete req.body.isPaidSubscriber;
+        delete req.body.trialEndsAt;
+      }
+
       const updated = await listingService.updateListing(req.params.id, landlordId, req.body, isAdmin);
       const safeUpdated = serializeListing(updated, isAdmin);
+
+      auditLogRepository.logAction({
+        userId: landlordId,
+        actorId: landlordId,
+        actorEmail: req.user ? req.user.email : 'landlord',
+        actorRole: req.user ? (req.user.role || (isAdmin ? 'ADMIN' : 'LANDLORD')) : 'LANDLORD',
+        action: 'ROOM_UPDATED',
+        category: 'ROOM',
+        resource: 'Listing',
+        resourceId: String(req.params.id),
+        status: 'SUCCESS',
+        result: 'SUCCESS',
+        ipAddress: req.ip,
+        requestId: req.id,
+        details: {
+          updatedFields: Object.keys(req.body)
+        }
+      }).catch(() => {});
 
       return ApiResponse.success(res, 'Listing updated successfully.', safeUpdated, 200, {
         listing: safeUpdated
       });
     } catch (err) {
-      return ApiResponse.error(res, err.message, 400);
+      const status = err.statusCode || (err.message && err.message.toLowerCase().includes('not authorized') ? 403 : 400);
+      return ApiResponse.error(res, err.message, status);
     }
   }
 
   async deleteListing(req, res, next) {
     try {
-      const landlordId = req.user ? (req.user.landlordId || req.user.userId) : null;
-      const isAdmin = req.user && (req.user.admin || req.user.role === 'ADMIN');
+      const landlordId = req.user ? (req.user.landlordId || req.user.userId || req.user._id) : null;
+      const isAdmin = Boolean(req.user && (req.user.admin || req.user.role === 'ADMIN' || req.user.role === 'SUPER_ADMIN'));
       const result = await listingService.deleteListing(req.params.id, landlordId, isAdmin);
+
+      auditLogRepository.logAction({
+        userId: landlordId,
+        actorId: landlordId,
+        actorEmail: req.user ? req.user.email : 'landlord',
+        actorRole: req.user ? (req.user.role || (isAdmin ? 'ADMIN' : 'LANDLORD')) : 'LANDLORD',
+        action: 'ROOM_DELETED',
+        category: 'ROOM',
+        resource: 'Listing',
+        resourceId: String(req.params.id),
+        status: 'SUCCESS',
+        result: 'SUCCESS',
+        ipAddress: req.ip,
+        requestId: req.id
+      }).catch(() => {});
 
       return ApiResponse.success(res, result.message, result);
     } catch (err) {
-      return ApiResponse.error(res, err.message, 400);
+      const status = err.statusCode || (err.message && err.message.toLowerCase().includes('not authorized') ? 403 : 400);
+      return ApiResponse.error(res, err.message, status);
     }
   }
 

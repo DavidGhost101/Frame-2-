@@ -15,6 +15,7 @@ const uploadRoutes = require('./uploadRoutes');
 router.use('/auth', authRoutes);
 router.use('/listings', listingRoutes);
 router.use('/room-requests', roomRequestRoutes);
+router.use('/requests', roomRequestRoutes);
 router.use('/admin', adminRoutes);
 router.use('/users', userRoutes);
 router.use('/reports', reportRoutes);

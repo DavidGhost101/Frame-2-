@@ -100,12 +100,36 @@ function fromFirestoreDoc(doc) {
 class PersistentStore {
   constructor() {
     this.isSyncing = false;
+    this.deletedListingIds = new Set();
+    this.deletedRequestIds = new Set();
     this.firestoreEnabled = Boolean(firebaseConfig && firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.firestoreDatabaseId);
     if (this.firestoreEnabled) {
       console.log(`[PersistentStore] Cloud Firestore persistence active for database: ${firebaseConfig.firestoreDatabaseId}`);
     } else {
       console.log('[PersistentStore] Local file-backed persistence active');
     }
+  }
+
+  recordDeletedListing(id) {
+    if (!id) return;
+    const strId = String(id);
+    this.deletedListingIds.add(strId);
+    this.deleteDocFromFirestore('listings', strId);
+  }
+
+  recordDeletedRequest(id) {
+    if (!id) return;
+    const strId = String(id);
+    this.deletedRequestIds.add(strId);
+    this.deleteDocFromFirestore('room_requests', strId);
+  }
+
+  isListingDeleted(id) {
+    return this.deletedListingIds.has(String(id));
+  }
+
+  isRequestDeleted(id) {
+    return this.deletedRequestIds.has(String(id));
   }
 
   /**
@@ -116,7 +140,13 @@ class PersistentStore {
       if (fs.existsSync(STORE_PATH)) {
         const raw = fs.readFileSync(STORE_PATH, 'utf8');
         const data = JSON.parse(raw);
-        console.log(`[PersistentStore] Successfully restored from local storage: ${data.listings?.length || 0} listings, ${data.requests?.length || 0} seeker requests`);
+        if (Array.isArray(data.deletedListingIds)) {
+          data.deletedListingIds.forEach(id => this.deletedListingIds.add(String(id)));
+        }
+        if (Array.isArray(data.deletedRequestIds)) {
+          data.deletedRequestIds.forEach(id => this.deletedRequestIds.add(String(id)));
+        }
+        console.log(`[PersistentStore] Successfully restored from local storage: ${data.listings?.length || 0} listings, ${data.requests?.length || 0} seeker requests (${this.deletedListingIds.size} deleted listings tracked)`);
         return data;
       }
     } catch (err) {
@@ -133,6 +163,8 @@ class PersistentStore {
       const tempPath = `${STORE_PATH}.tmp.${Date.now()}`;
       const payload = {
         savedAt: new Date().toISOString(),
+        deletedListingIds: Array.from(this.deletedListingIds),
+        deletedRequestIds: Array.from(this.deletedRequestIds),
         listings: data.listings || [],
         requests: data.requests || [],
         landlords: data.landlords || [],
@@ -240,7 +272,23 @@ class PersistentStore {
       if (remoteListings.length > 0) {
         console.log(`[PersistentStore] Found ${remoteListings.length} listings in Cloud Firestore`);
         for (const remote of remoteListings) {
-          const existingIdx = store.fallbackListings.findIndex(l => String(l._id) === String(remote._id));
+          const isCheap = (remote.title || '').toLowerCase().includes('cheap room');
+          const isDeleted = this.isListingDeleted(remote._id) || remote.isDeleted === true || remote.status === 'deleted' || remote.publicationStatus === 'DELETED';
+          if (isCheap || isDeleted) {
+            // Permanently purge from Firestore so it never returns
+            await this.deleteDocFromFirestore('listings', remote._id);
+            if (isCheap) this.recordDeletedListing(remote._id);
+            continue;
+          }
+
+          // Check duplicate by ID or signature
+          const remoteSig = `${(remote.title||'').trim().toLowerCase()}|${(remote.address||'').trim().toLowerCase()}|${(remote.suburb||'').trim().toLowerCase()}`;
+          const existingIdx = store.fallbackListings.findIndex(l => {
+            if (String(l._id) === String(remote._id)) return true;
+            const lSig = `${(l.title||'').trim().toLowerCase()}|${(l.address||'').trim().toLowerCase()}|${(l.suburb||'').trim().toLowerCase()}`;
+            return lSig && lSig === remoteSig;
+          });
+
           if (existingIdx >= 0) {
             store.fallbackListings[existingIdx] = { ...store.fallbackListings[existingIdx], ...remote };
           } else {
@@ -251,7 +299,9 @@ class PersistentStore {
         // Seed initial listings to Firestore
         console.log(`[PersistentStore] Seeding ${store.fallbackListings.length} initial listings to Cloud Firestore...`);
         for (const item of store.fallbackListings) {
-          await this.syncDocToFirestore('listings', item._id, item);
+          if (!this.isListingDeleted(item._id) && !(item.title || '').toLowerCase().includes('cheap room')) {
+            await this.syncDocToFirestore('listings', item._id, item);
+          }
         }
       }
 
@@ -260,7 +310,19 @@ class PersistentStore {
       if (remoteRequests.length > 0) {
         console.log(`[PersistentStore] Found ${remoteRequests.length} seeker requests in Cloud Firestore`);
         for (const remote of remoteRequests) {
-          const existingIdx = store.fallbackRequests.findIndex(r => String(r._id) === String(remote._id));
+          const isDeleted = this.isRequestDeleted(remote._id) || remote.isDeleted === true || remote.status === 'deleted';
+          if (isDeleted) {
+            await this.deleteDocFromFirestore('room_requests', remote._id);
+            continue;
+          }
+
+          const remoteSig = `${(remote.seekerName||'').trim().toLowerCase()}|${(remote.phone||'').trim().toLowerCase()}|${(remote.suburb||'').trim().toLowerCase()}`;
+          const existingIdx = store.fallbackRequests.findIndex(r => {
+            if (String(r._id) === String(remote._id)) return true;
+            const rSig = `${(r.seekerName||'').trim().toLowerCase()}|${(r.phone||'').trim().toLowerCase()}|${(r.suburb||'').trim().toLowerCase()}`;
+            return rSig && rSig === remoteSig;
+          });
+
           if (existingIdx >= 0) {
             store.fallbackRequests[existingIdx] = { ...store.fallbackRequests[existingIdx], ...remote };
           } else {
@@ -271,7 +333,9 @@ class PersistentStore {
         // Seed initial requests to Firestore
         console.log(`[PersistentStore] Seeding ${store.fallbackRequests.length} initial seeker requests to Cloud Firestore...`);
         for (const item of store.fallbackRequests) {
-          await this.syncDocToFirestore('room_requests', item._id, item);
+          if (!this.isRequestDeleted(item._id)) {
+            await this.syncDocToFirestore('room_requests', item._id, item);
+          }
         }
       }
 

@@ -19,6 +19,8 @@
   } catch (_) {}
 </script>
 <script src="/js/phoneUtils.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/apiClient.js"></script>
 
 <script>
   // Robust global error suppression for cross-origin third-party script events & unhandled rejections
@@ -74,6 +76,24 @@
     .skeleton-shimmer::after {
       animation: none;
     }
+    .photo-optimizing-pulse {
+      animation: none !important;
+    }
+  }
+
+  /* Photo Optimizing Subtle Pulse Animation */
+  @keyframes photoPulseRing {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.45);
+      border-color: rgba(225, 29, 72, 0.7);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgba(225, 29, 72, 0);
+      border-color: rgba(225, 29, 72, 0.35);
+    }
+  }
+  .photo-optimizing-pulse {
+    animation: photoPulseRing 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 </style>
 </head>
@@ -413,6 +433,9 @@
 
     <!-- Listings Grid -->
     <div id="listingsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+
+    <!-- Listings Pagination -->
+    <div id="listingsPagination" class="mt-8"></div>
   </section>
 
   <!-- VIEW 2: ROOM SEEKERS / ROOMS WANTED VIEW -->
@@ -449,6 +472,9 @@
 
     <!-- Seeker Grid -->
     <div id="seekersGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+
+    <!-- Seekers Pagination -->
+    <div id="seekersPagination" class="mt-8"></div>
   </section>
 
   <!-- VIEW 3: GEMINI AI HOUSING & RENTAL ADVISOR (WITH GOOGLE SEARCH GROUNDING) -->
@@ -617,6 +643,116 @@
   <span class="text-base animate-bounce">🤖</span>
   <span class="hidden sm:inline font-bold">Ask AI Advisor</span>
 </button>
+
+<!-- REAL DEVICE CAMERA CAPTURE MODAL -->
+<div id="cameraCaptureModal" class="modal-backdrop fixed inset-0 bg-black/95 backdrop-blur-md flex flex-col items-center justify-between p-3 sm:p-5 z-60 hidden" onclick="handleCameraBackdropClick(event)">
+  <!-- Top Bar -->
+  <div class="w-full max-w-xl flex items-center justify-between text-white py-2 px-1 z-20" onclick="event.stopPropagation()">
+    <div class="flex items-center gap-2">
+      <span class="text-xl">📷</span>
+      <div>
+        <h3 class="text-sm font-bold tracking-tight">Room Camera</h3>
+        <p class="text-[11px] text-slate-300">Capture a clear photo of the room interior, yard, or entrance</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button type="button" id="cameraFlipBtn" onclick="flipDeviceCamera()" class="px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer" title="Flip between back and front camera">
+        <span>🔄</span> <span class="hidden sm:inline">Flip</span>
+      </button>
+      <button type="button" onclick="closeRealDeviceCameraModal(true)" aria-label="Close" title="Cancel and keep current photo" class="w-9 h-9 rounded-full bg-white/10 hover:bg-rose-600 text-white flex items-center justify-center font-bold text-base transition cursor-pointer">
+        ✕
+      </button>
+    </div>
+  </div>
+
+  <!-- Viewfinder Stage -->
+  <div class="relative w-full max-w-xl flex-1 min-h-[320px] max-h-[72vh] flex items-center justify-center rounded-2xl overflow-hidden bg-slate-950 border border-white/15 shadow-2xl my-2" onclick="event.stopPropagation()">
+    <!-- Live Video Stream -->
+    <video id="cameraStreamVideo" autoplay playsinline webkit-playsinline muted class="w-full h-full object-cover"></video>
+
+    <!-- Snapped Image Preview (when photo is taken, before confirming) -->
+    <img id="cameraCapturedImg" src="" alt="Captured room snapshot" class="hidden w-full h-full object-contain bg-black" />
+
+    <!-- Viewfinder Framing Guides -->
+    <div id="cameraFramingGuides" class="absolute inset-0 pointer-events-none p-5 flex flex-col justify-between">
+      <div class="flex justify-between">
+        <div class="w-8 h-8 border-t-2 border-l-2 border-white/70 rounded-tl-lg"></div>
+        <div class="w-8 h-8 border-t-2 border-r-2 border-white/70 rounded-tr-lg"></div>
+      </div>
+      <div class="text-center">
+        <span class="inline-block px-3 py-1 rounded-full bg-black/60 text-white text-[11px] font-medium backdrop-blur-xs shadow-xs">
+          Align room interior, windows, or floor
+        </span>
+      </div>
+      <div class="flex justify-between">
+        <div class="w-8 h-8 border-b-2 border-l-2 border-white/70 rounded-bl-lg"></div>
+        <div class="w-8 h-8 border-b-2 border-r-2 border-white/70 rounded-br-lg"></div>
+      </div>
+    </div>
+
+    <!-- Visual Shutter Flash Effect -->
+    <div id="cameraFlashOverlay" class="absolute inset-0 bg-white opacity-0 pointer-events-none transition-opacity duration-150"></div>
+
+    <!-- Starting / Loading Indicator -->
+    <div id="cameraLoadingIndicator" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white p-6 space-y-3">
+      <div class="w-10 h-10 border-3 border-white/30 border-t-brand-500 rounded-full animate-spin"></div>
+      <p class="text-xs font-bold tracking-wide">Connecting to device camera...</p>
+    </div>
+
+    <!-- Error / Permission Denied Overlay -->
+    <div id="cameraErrorOverlay" class="hidden absolute inset-0 bg-slate-950/95 flex flex-col items-center justify-center text-center p-6 text-white space-y-4">
+      <div class="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-400 border border-amber-500/40 flex items-center justify-center text-2xl">
+        🔒
+      </div>
+      <div class="space-y-1.5 max-w-sm">
+        <h4 id="cameraErrorTitle" class="text-sm font-bold text-white">Camera Access Required</h4>
+        <p id="cameraErrorMessage" class="text-xs text-slate-300 leading-relaxed">
+          Please allow camera permission in your browser or device settings so you can take a room photo.
+        </p>
+      </div>
+      <div class="flex flex-wrap justify-center gap-2 pt-2">
+        <button type="button" onclick="startDeviceCameraStream()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-md transition cursor-pointer flex items-center gap-1.5">
+          <span>🔄</span> Try Again
+        </button>
+        <button type="button" onclick="chooseFromGalleryFromCamera()" class="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5">
+          <span>🖼️</span> Choose from Gallery
+        </button>
+        <button type="button" onclick="triggerNativeCameraInput()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 rounded-xl text-xs font-medium transition cursor-pointer flex items-center gap-1">
+          <span>📱</span> Camera App
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Control Bar -->
+  <div class="w-full max-w-xl py-3 px-4 z-20" onclick="event.stopPropagation()">
+    <!-- Live Mode Controls (Snap Photo) -->
+    <div id="cameraLiveControls" class="flex items-center justify-between">
+      <button type="button" onclick="closeRealDeviceCameraModal(true)" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold transition cursor-pointer">
+        Cancel
+      </button>
+
+      <!-- Shutter Button -->
+      <button type="button" id="cameraShutterBtn" onclick="takeCameraSnapshot()" class="group relative w-18 h-18 rounded-full border-4 border-white flex items-center justify-center shadow-2xl active:scale-95 transition cursor-pointer" title="Take Photo">
+        <span class="w-14 h-14 rounded-full bg-white group-hover:bg-brand-50 transition"></span>
+      </button>
+
+      <button type="button" onclick="triggerNativeCameraInput()" class="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition cursor-pointer flex items-center gap-1" title="Use native mobile camera app">
+        <span>📱</span> <span class="hidden sm:inline">Camera App</span>
+      </button>
+    </div>
+
+    <!-- Review Captured Snapshot Controls (Retake / Use Photo) -->
+    <div id="cameraReviewControls" class="hidden flex items-center justify-center gap-3">
+      <button type="button" id="cameraRetakeBtn" onclick="retakeCameraSnapshot()" class="px-5 py-2.5 rounded-xl bg-white/15 hover:bg-white/25 border border-white/25 text-white text-xs font-bold transition cursor-pointer flex items-center gap-1.5">
+        <span>🔄</span> Retake Photo
+      </button>
+      <button type="button" id="cameraUsePhotoBtn" onclick="confirmCameraSnapshot()" class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-lg transition cursor-pointer flex items-center gap-1.5">
+        <span>✓</span> Use This Photo
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- PHOTO LIGHTBOX MODAL -->
 <div id="photoLightboxModal" class="modal-backdrop fixed inset-0 bg-black/95 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 z-60 hidden" onclick="closePhotoLightbox()">
@@ -1080,20 +1216,56 @@
         </div>
 
         <!-- Photo Upload Dropzone / Button -->
-        <div id="imageUploadArea" onclick="handleImageUploadAreaClick(event)" class="border-2 border-dashed border-slate-300 hover:border-brand-500 bg-slate-50 hover:bg-brand-50/40 rounded-2xl p-4 text-center transition relative group cursor-pointer">
+        <div id="imageUploadArea" onclick="handleImageUploadAreaClick(event)" class="border-2 border-dashed border-slate-300 hover:border-brand-500 bg-slate-50 hover:bg-brand-50/40 rounded-2xl p-4 text-center transition-all duration-300 relative group cursor-pointer">
           <input type="file" id="roomPhotoFileInput" accept="image/*" class="hidden" onchange="handleRoomPhotoFileSelected(this)" />
           <input type="file" id="roomPhotoCameraInput" accept="image/*" capture="environment" class="hidden" onchange="handleRoomPhotoFileSelected(this)" />
           
-          <!-- Optimizing Progress Indicator -->
-          <div id="photoOptimizingIndicator" class="hidden p-4 space-y-2">
-            <div class="w-10 h-10 mx-auto rounded-xl bg-brand-500/10 text-brand-600 flex items-center justify-center">
-              <span class="inline-block w-5 h-5 border-2 border-brand-500/30 border-t-brand-600 rounded-full animate-spin"></span>
+          <!-- State 2: Uploading Progress Indicator -->
+          <div id="photoUploadingIndicator" class="hidden p-6 space-y-3">
+            <div class="w-12 h-12 mx-auto rounded-2xl bg-brand-50 border border-brand-200 text-brand-600 flex items-center justify-center shadow-xs">
+              <span class="inline-block w-6 h-6 border-2 border-brand-500/30 border-t-brand-600 rounded-full animate-spin"></span>
             </div>
-            <p class="text-xs font-bold text-slate-800">Optimizing & attaching picture...</p>
-            <p class="text-[10px] text-slate-500">Preparing high-quality compact image for your listing</p>
+            <div class="space-y-1">
+              <p class="text-xs font-bold text-slate-800">Uploading room photo...</p>
+              <p class="text-[11px] text-slate-500">Reading image data from your device</p>
+            </div>
           </div>
 
-          <!-- Upload Prompt UI -->
+          <!-- State 3: Optimizing Progress Indicator (Subtle Pulse Animation) -->
+          <div id="photoOptimizingIndicator" class="hidden p-6 space-y-3">
+            <div class="w-12 h-12 mx-auto rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center relative shadow-xs">
+              <span class="inline-block w-6 h-6 border-2 border-rose-500/30 border-t-rose-600 rounded-full animate-spin"></span>
+              <span class="absolute -top-1 -right-1 flex h-3 w-3">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+              </span>
+            </div>
+            <div class="space-y-1">
+              <p id="photoOptimizingStatusText" class="text-xs font-bold text-slate-800">Optimizing photo...</p>
+              <p class="text-[11px] text-slate-500">Resizing and compressing for fast loading (preserving high quality)</p>
+            </div>
+          </div>
+
+          <!-- State 5: Failed / Error Container with Retry -->
+          <div id="photoErrorContainer" class="hidden p-5 space-y-3 text-center" onclick="event.stopPropagation()">
+            <div class="w-11 h-11 mx-auto rounded-2xl bg-red-50 border border-red-200 text-red-600 flex items-center justify-center text-xl shadow-xs">
+              ⚠️
+            </div>
+            <div class="space-y-0.5">
+              <p id="photoErrorMessage" class="text-xs font-bold text-red-800">Could not process room photo.</p>
+              <p class="text-[11px] text-slate-500">Please choose a valid JPG, PNG, or WEBP photo under 25MB.</p>
+            </div>
+            <div class="flex flex-wrap justify-center gap-2 pt-1">
+              <button type="button" onclick="retryLastPhotoProcessing()" class="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer transition">
+                🔄 Retry Upload
+              </button>
+              <button type="button" onclick="resetPhotoUploadState()" class="px-3.5 py-1.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold shadow-xs cursor-pointer transition">
+                Choose Another Photo
+              </button>
+            </div>
+          </div>
+
+          <!-- State 1: Upload Prompt UI (Empty state) -->
           <div id="uploadPromptContainer" class="space-y-3">
             <div class="w-12 h-12 mx-auto rounded-2xl bg-brand-100 text-brand-600 flex items-center justify-center text-2xl group-hover:scale-105 transition shadow-xs">
               📸
@@ -1107,37 +1279,37 @@
             
             <!-- Picture Action Buttons -->
             <div class="flex flex-wrap justify-center gap-2 pt-1" onclick="event.stopPropagation()">
-              <button type="button" onclick="triggerPhotoSelect()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:border-brand-500 text-slate-800 hover:text-brand-600 text-xs font-bold shadow-2xs transition cursor-pointer">
-                <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                <span>Upload from Device</span>
+              <button type="button" id="btnChooseFromGallery" onclick="triggerPhotoSelect()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:border-brand-500 text-slate-800 hover:text-brand-600 text-xs font-bold shadow-2xs transition cursor-pointer">
+                <span>🖼️</span>
+                <span>Choose from Gallery</span>
               </button>
-              <button type="button" onclick="triggerCameraCapture()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-50 border border-brand-300 hover:border-brand-500 text-brand-700 hover:bg-brand-100 text-xs font-bold shadow-2xs transition cursor-pointer">
+              <button type="button" id="btnTakePhoto" onclick="triggerCameraCapture()" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-brand-50 border border-brand-300 hover:border-brand-500 text-brand-700 hover:bg-brand-100 text-xs font-bold shadow-2xs transition cursor-pointer">
                 <span>📷</span>
                 <span>Take Photo</span>
               </button>
             </div>
           </div>
 
-          <!-- Preview Container (shown when photo is selected) -->
-          <div id="imagePreviewContainer" class="hidden relative text-left" onclick="event.stopPropagation()">
-            <div class="relative w-full h-52 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shadow-inner group/prev">
-              <img id="roomPhotoPreviewImg" src="" alt="Room preview" class="w-full h-full object-cover cursor-zoom-in" onclick="openPhotoLightbox(this.src, 'Selected Room Photo Preview', 'Ready for publication')" title="Click to enlarge photo" />
+          <!-- State 4: Preview Container (Successfully processed state with smooth transition) -->
+          <div id="imagePreviewContainer" class="hidden relative text-left transition-all duration-300 ease-out transform" onclick="event.stopPropagation()">
+            <div class="relative w-full h-52 sm:h-56 rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shadow-inner group/prev">
+              <img id="roomPhotoPreviewImg" src="" alt="Room preview" class="w-full h-full object-cover cursor-zoom-in transition-all duration-300" onclick="openPhotoLightbox(this.src, 'Selected Room Photo Preview', 'Ready for publication')" title="Click to enlarge photo" />
               <div class="absolute top-2 right-2 flex flex-wrap gap-1.5 z-10">
-                <button type="button" onclick="openPhotoLightbox(document.getElementById('roomPhotoPreviewImg').src, 'Selected Room Photo Preview', 'Ready for publication')" class="px-2.5 py-1 bg-black/75 hover:bg-black text-white rounded-lg text-xs font-bold shadow-md cursor-pointer transition flex items-center gap-1" title="Enlarge photo">
+                <button type="button" id="btnPreviewPhotoView" onclick="openPhotoLightbox(document.getElementById('roomPhotoPreviewImg').src, 'Selected Room Photo Preview', 'Ready for publication')" class="px-2.5 py-1 bg-black/75 hover:bg-black text-white rounded-lg text-xs font-bold shadow-md cursor-pointer transition flex items-center gap-1" title="Enlarge photo">
                   <span>🔍</span> View
                 </button>
-                <button type="button" onclick="triggerPhotoSelect()" class="px-2.5 py-1 bg-slate-900/80 hover:bg-slate-900 text-white rounded-lg text-xs font-bold shadow-md cursor-pointer transition">
-                  ✏️ Change
+                <button type="button" id="btnPreviewPhotoRetake" onclick="triggerCameraCapture()" class="px-2.5 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-bold shadow-md cursor-pointer transition flex items-center gap-1" title="Retake photo using device camera">
+                  <span>📷</span> Retake
                 </button>
-                <button type="button" onclick="triggerCameraCapture()" class="px-2 py-1 bg-slate-900/80 hover:bg-slate-900 text-white rounded-lg text-xs font-bold shadow-md cursor-pointer transition" title="Take new photo">
-                  📷
+                <button type="button" id="btnPreviewPhotoGallery" onclick="triggerPhotoSelect()" class="px-2.5 py-1 bg-slate-900/80 hover:bg-slate-900 text-white rounded-lg text-xs font-bold shadow-md cursor-pointer transition flex items-center gap-1" title="Choose another photo from gallery">
+                  <span>🖼️</span> Gallery
                 </button>
-                <button type="button" onclick="removeUploadedPhoto()" class="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-md cursor-pointer transition">
+                <button type="button" id="btnPreviewPhotoRemove" onclick="removeUploadedPhoto()" class="px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold shadow-md cursor-pointer transition" title="Remove attached photo">
                   ✕
                 </button>
               </div>
               <div class="absolute bottom-2 left-2 px-2.5 py-1 bg-black/75 text-white text-[11px] font-bold rounded-md backdrop-blur-xs flex items-center gap-1">
-                <span>✓ Photo Attached</span>
+                <span id="photoReadyLabel">✓ Photo ready</span>
                 <span id="photoFileName" class="text-slate-300 font-normal max-w-[160px] truncate ml-1"></span>
               </div>
             </div>
@@ -1479,24 +1651,18 @@ try {
 let loadedListingsCache = [];
 let activeDetailListing = null;
 let filterOnlyFavorites = false;
+let currentListingsPage = 1;
+const ROOMS_PER_PAGE = 10;
 
-// Toast notification helper
+let loadedSeekersCache = [];
+let currentSeekersPage = 1;
+const SEEKERS_PER_PAGE = 10;
+
+// Toast notification helper delegating to AppToast
 function showToast(message, type = 'info') {
-  const container = document.getElementById('toast-container');
-  const toast = document.createElement('div');
-  const bg = type === 'success' ? 'bg-emerald-600 text-white' : type === 'error' ? 'bg-red-600 text-white' : 'bg-slate-900 text-white';
-  toast.className = `${bg} px-4 py-3 rounded-xl shadow-lg text-xs font-bold pointer-events-auto flex items-center gap-2 transform transition-all duration-300 ease-out translate-y-2 opacity-0 z-50`;
-  toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
-  container.appendChild(toast);
-
-  requestAnimationFrame(() => {
-    toast.classList.remove('translate-y-2', 'opacity-0');
-  });
-
-  setTimeout(() => {
-    toast.classList.add('opacity-0', 'translate-y-2');
-    setTimeout(() => toast.remove(), 300);
-  }, 4000);
+  if (window.AppToast && typeof window.AppToast.show === 'function') {
+    return window.AppToast.show(message, { type });
+  }
 }
 
 // Update saved favorites count badge
@@ -1942,7 +2108,10 @@ function updateActiveFilterBadges() {
 }
 
 // 1. LOAD ROOM LISTINGS
-async function loadListings() {
+async function loadListings(resetPage = false) {
+  if (resetPage) {
+    currentListingsPage = 1;
+  }
   const countEl = document.getElementById('roomCount');
   const tabCountEl = document.getElementById('tabCountListings');
   const suburb = document.getElementById('suburbFilter') ? document.getElementById('suburbFilter').value.trim() : '';
@@ -1965,13 +2134,41 @@ async function loadListings() {
   if (keyword) params.set('keyword', keyword);
   if (sort) params.set('sort', sort);
 
+  // Pagination parameters: limits to 10 per request
+  params.set('page', currentListingsPage);
+  params.set('limit', ROOMS_PER_PAGE.toString());
+  params.set('sortBy', sort === 'price_asc' || sort === 'price_desc' ? 'monthlyRent' : 'createdAt');
+  params.set('order', sort === 'price_asc' ? 'asc' : 'desc');
+
   try {
     const res = await fetch('/api/listings?' + params.toString());
     const data = await res.json();
-    loadedListingsCache = data.listings || (data.data && Array.isArray(data.data) ? data.data : (data.data && data.data.items)) || [];
-    
-    if (tabCountEl) tabCountEl.innerText = loadedListingsCache.length;
-    renderListingsGrid(loadedListingsCache);
+    let rawItems = (data.data && data.data.items) || data.listings || (Array.isArray(data.data) ? data.data : []) || [];
+    const serverTotal = (data.data && data.data.pagination && data.data.pagination.total != null)
+      ? data.data.pagination.total
+      : (data.total != null ? data.total : rawItems.length);
+    const serverTotalPages = (data.data && data.data.pagination && data.data.pagination.totalPages != null)
+      ? data.data.pagination.totalPages
+      : Math.max(1, Math.ceil(serverTotal / ROOMS_PER_PAGE));
+
+    // Strict client-side filter: exclude deleted items, "cheap room", and duplicates
+    const seenMap = new Set();
+    const cleanList = [];
+    for (const item of rawItems) {
+      if (!item || item.isDeleted || item.status === 'deleted') continue;
+      const titleLower = (item.title || '').toLowerCase();
+      if (titleLower.includes('cheap room') || titleLower.startsWith('cheap room')) continue;
+      const idStr = String(item._id);
+      const sig = `${titleLower.trim()}|${(item.address||'').trim().toLowerCase()}|${(item.suburb||'').trim().toLowerCase()}`;
+      if (seenMap.has(idStr) || (sig && seenMap.has(sig))) continue;
+      seenMap.add(idStr);
+      if (sig) seenMap.add(sig);
+      cleanList.push(item);
+    }
+
+    loadedListingsCache = cleanList;
+    if (tabCountEl) tabCountEl.innerText = serverTotal;
+    renderListingsGrid(loadedListingsCache, serverTotal, serverTotalPages);
 
     // Deep linking: check URL parameters on initial listing load
     checkUrlParamsAndOpenRoom();
@@ -1982,12 +2179,32 @@ async function loadListings() {
   }
 }
 
-function renderListingsGrid(items) {
+function renderListingsGrid(items, serverTotal = null, serverTotalPages = null) {
   const grid = document.getElementById('listingsGrid');
   const countEl = document.getElementById('roomCount');
   if (grid) grid.removeAttribute('aria-busy');
 
   let displayItems = [...(items || [])];
+
+  // Exclude any deleted or "cheap room" listings
+  displayItems = displayItems.filter(r => {
+    if (!r || r.isDeleted || r.status === 'deleted') return false;
+    const t = (r.title || '').toLowerCase();
+    if (t.includes('cheap room') || t.startsWith('cheap room')) return false;
+    return true;
+  });
+
+  // Client-side deduplication
+  const seenGridIds = new Set();
+  const seenGridSigs = new Set();
+  displayItems = displayItems.filter(r => {
+    const idStr = String(r._id);
+    const sig = `${(r.title||'').trim().toLowerCase()}|${(r.address||'').trim().toLowerCase()}|${(r.suburb||'').trim().toLowerCase()}`;
+    if (seenGridIds.has(idStr) || (sig && seenGridSigs.has(sig))) return false;
+    seenGridIds.add(idStr);
+    if (sig) seenGridSigs.add(sig);
+    return true;
+  });
 
   if (filterOnlyFavorites) {
     displayItems = displayItems.filter(r => savedListingIds.includes(r._id));
@@ -2001,59 +2218,53 @@ function renderListingsGrid(items) {
     });
   }
 
-  // Client-side keyword search (amenities, landmarks, building types, etc.)
-  const keywordInput = document.getElementById('keywordFilter');
-  const kw = keywordInput ? keywordInput.value.trim().toLowerCase() : '';
-  if (kw) {
-    displayItems = displayItems.filter(r => {
-      const title = (r.title || '').toLowerCase();
-      const suburb = (r.suburb || '').toLowerCase();
-      const address = (r.address || '').toLowerCase();
-      const institution = (r.nearbyInstitution || '').toLowerCase();
-      const propType = (r.propertyType || '').toLowerCase();
-      const desc = (r.description || '').toLowerCase();
-      const amenitiesStr = (r.amenities || []).join(' ').toLowerCase();
-      const landlord = (r.landlordFullName || (r.landlordId && r.landlordId.fullName) || '').toLowerCase();
-      return title.includes(kw) ||
-             suburb.includes(kw) ||
-             address.includes(kw) ||
-             institution.includes(kw) ||
-             propType.includes(kw) ||
-             desc.includes(kw) ||
-             amenitiesStr.includes(kw) ||
-             landlord.includes(kw);
-    });
-  }
-
-  // Sorting: price low to high, price high to low, or newest
+  // Sorting: newest first by default (new rooms posted appear on top of list), or price
   const sortMode = getSelectedListingSort();
   if (sortMode === 'price_asc') {
     displayItems.sort((a, b) => (Number(a.monthlyRent) || 0) - (Number(b.monthlyRent) || 0));
   } else if (sortMode === 'price_desc') {
     displayItems.sort((a, b) => (Number(b.monthlyRent) || 0) - (Number(a.monthlyRent) || 0));
   } else {
+    // Newest rooms posted on top of the list: sorted by createdAt descending
     displayItems.sort((a, b) => {
       const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return tB - tA;
+      if (tB !== tA) return tB - tA;
+      return String(b._id || '').localeCompare(String(a._id || ''));
     });
   }
 
   updateActiveFilterBadges();
 
-  countEl.innerText = `Showing ${displayItems.length} room${displayItems.length === 1 ? '' : 's'}`;
+  const totalMatching = serverTotal != null ? Number(serverTotal) : displayItems.length;
+  const totalPages = serverTotalPages != null ? Number(serverTotalPages) : Math.max(1, Math.ceil(totalMatching / ROOMS_PER_PAGE));
+  if (currentListingsPage > totalPages) currentListingsPage = totalPages;
+  if (currentListingsPage < 1) currentListingsPage = 1;
 
-  if (displayItems.length === 0) {
+  if (totalMatching === 0 || displayItems.length === 0) {
+    countEl.innerText = 'No rooms found';
     grid.innerHTML = `
       <div class="col-span-full text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300 p-8 space-y-3 shadow-xs">
         <div class="text-3xl">🔍</div>
         <p class="text-slate-700 font-bold">${filterOnlyFavorites ? 'No saved rooms yet. Click the heart on any listing to save it!' : 'No rooms found matching your search filters.'}</p>
-        <button onclick="resetListingFilters()" class="text-brand-500 font-bold hover:underline text-sm">Reset All Filters</button>
+        <button onclick="resetListingFilters()" class="text-brand-500 font-bold hover:underline text-sm cursor-pointer">Reset All Filters</button>
       </div>`;
+    renderListingsPagination(0, 0);
     return;
   }
 
-  grid.innerHTML = displayItems.map(room => {
+  // The API returns the 10 rooms segment for the requested page
+  const pageItems = displayItems;
+  const startIdx = (currentListingsPage - 1) * ROOMS_PER_PAGE;
+  const endIdx = Math.min(startIdx + pageItems.length, totalMatching);
+
+  if (totalPages === 1) {
+    countEl.innerText = `Showing ${totalMatching} room${totalMatching === 1 ? '' : 's'}`;
+  } else {
+    countEl.innerText = `Showing ${startIdx + 1}–${endIdx} of ${totalMatching} rooms (Page ${currentListingsPage} of ${totalPages})`;
+  }
+
+  grid.innerHTML = pageItems.map(room => {
     const isSaved = savedListingIds.includes(room._id);
     const rentFormatted = Number(room.monthlyRent).toLocaleString();
     const photoUrl = room.image || 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=80';
@@ -2133,6 +2344,101 @@ function renderListingsGrid(items) {
       </div>
     `;
   }).join('');
+
+  renderListingsPagination(totalMatching, totalPages);
+}
+
+// Render pagination navigation controls (10 rooms per page)
+function renderListingsPagination(totalMatching, totalPages) {
+  const container = document.getElementById('listingsPagination');
+  if (!container) return;
+
+  if (totalMatching === 0 || totalPages <= 1) {
+    container.innerHTML = '';
+    container.classList.add('hidden');
+    return;
+  }
+
+  container.classList.remove('hidden');
+
+  let pageButtonsHtml = '';
+  const maxButtons = 5;
+  let startPage = Math.max(1, currentListingsPage - 2);
+  let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+  if (endPage - startPage + 1 < maxButtons) {
+    startPage = Math.max(1, endPage - maxButtons + 1);
+  }
+
+  if (startPage > 1) {
+    pageButtonsHtml += `
+      <button type="button" onclick="changeListingsPage(1)" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-xs sm:text-sm font-bold bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 transition flex items-center justify-center cursor-pointer shadow-2xs" title="Page 1">1</button>
+    `;
+    if (startPage > 2) {
+      pageButtonsHtml += `<span class="px-1 text-center text-slate-400 font-bold text-xs">…</span>`;
+    }
+  }
+
+  for (let p = startPage; p <= endPage; p++) {
+    if (p === currentListingsPage) {
+      pageButtonsHtml += `
+        <button type="button" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-xs sm:text-sm font-black bg-rose-600 text-white shadow-sm flex items-center justify-center cursor-default" aria-current="page">${p}</button>
+      `;
+    } else {
+      pageButtonsHtml += `
+        <button type="button" onclick="changeListingsPage(${p})" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-xs sm:text-sm font-bold bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 transition flex items-center justify-center cursor-pointer shadow-2xs" title="Page ${p}">${p}</button>
+      `;
+    }
+  }
+
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      pageButtonsHtml += `<span class="px-1 text-center text-slate-400 font-bold text-xs">…</span>`;
+    }
+    pageButtonsHtml += `
+      <button type="button" onclick="changeListingsPage(${totalPages})" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-xs sm:text-sm font-bold bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 transition flex items-center justify-center cursor-pointer shadow-2xs" title="Page ${totalPages}">${totalPages}</button>
+    `;
+  }
+
+  const isFirst = currentListingsPage === 1;
+  const isLast = currentListingsPage === totalPages;
+
+  container.innerHTML = `
+    <div class="flex flex-col items-center gap-3 py-4 border-t border-slate-200/80">
+      <div class="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+        <button type="button" 
+                onclick="changeListingsPage(${currentListingsPage - 1})" 
+                class="px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition ${isFirst ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60' : 'bg-white text-slate-800 hover:bg-slate-100 border border-slate-200 cursor-pointer shadow-2xs'}" 
+                ${isFirst ? 'disabled' : ''}>
+          <span>←</span> <span>Previous</span>
+        </button>
+
+        <div class="flex items-center gap-1 sm:gap-1.5">
+          ${pageButtonsHtml}
+        </div>
+
+        <button type="button" 
+                onclick="changeListingsPage(${currentListingsPage + 1})" 
+                class="px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition ${isLast ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60' : 'bg-white text-slate-800 hover:bg-slate-100 border border-slate-200 cursor-pointer shadow-2xs'}" 
+                ${isLast ? 'disabled' : ''}>
+          <span>Next</span> <span>→</span>
+        </button>
+      </div>
+
+      <div class="text-xs text-slate-500 font-medium">
+        Showing page <strong class="text-slate-800">${currentListingsPage}</strong> of <strong class="text-slate-800">${totalPages}</strong> • <span class="text-slate-600 font-semibold">${totalMatching} total rooms</span> (10 rooms per page)
+      </div>
+    </div>
+  `;
+}
+
+function changeListingsPage(newPage) {
+  if (newPage < 1) return;
+  currentListingsPage = newPage;
+  loadListings(false);
+  const target = document.getElementById('listingsView') || document.getElementById('listingsGrid');
+  if (target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 // Format listing document creation timestamp
@@ -2469,7 +2775,10 @@ function renderSeekersSkeleton(count = 6) {
 }
 
 // 2. LOAD ROOM SEEKERS
-async function loadSeekers() {
+async function loadSeekers(resetPage = false) {
+  if (resetPage) {
+    currentSeekersPage = 1;
+  }
   const grid = document.getElementById('seekersGrid');
   const countEl = document.getElementById('seekerCount');
   const tabCountEl = document.getElementById('tabCountSeekers');
@@ -2489,22 +2798,47 @@ async function loadSeekers() {
     const res = await fetch('/api/room-requests?' + params.toString());
     const data = await res.json();
     const items = data.requests || [];
+    loadedSeekersCache = [...items];
     
-    if (grid) grid.removeAttribute('aria-busy');
-    if (tabCountEl) tabCountEl.innerText = items.length;
-    countEl.innerText = `Showing ${items.length} seeker request${items.length === 1 ? '' : 's'}`;
+    // Sort newest first
+    loadedSeekersCache.sort((a, b) => {
+      const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      if (tB !== tA) return tB - tA;
+      return String(b._id || '').localeCompare(String(a._id || ''));
+    });
 
-    if (items.length === 0) {
+    if (grid) grid.removeAttribute('aria-busy');
+    if (tabCountEl) tabCountEl.innerText = loadedSeekersCache.length;
+
+    const totalMatching = loadedSeekersCache.length;
+    const totalPages = Math.max(1, Math.ceil(totalMatching / SEEKERS_PER_PAGE));
+    if (currentSeekersPage > totalPages) currentSeekersPage = totalPages;
+    if (currentSeekersPage < 1) currentSeekersPage = 1;
+
+    if (totalMatching === 0) {
+      countEl.innerText = 'No room requests found';
       grid.innerHTML = `
         <div class="col-span-full text-center py-12 bg-white rounded-2xl border border-dashed border-slate-300 p-8 space-y-3 shadow-xs">
           <div class="text-3xl">🙋</div>
           <p class="text-slate-700 font-bold">No room requests found for this area or budget filter.</p>
-          <button onclick="resetSeekerFilters()" class="text-emerald-600 font-bold hover:underline text-sm">Reset Seeker Filters</button>
+          <button onclick="resetSeekerFilters()" class="text-emerald-600 font-bold hover:underline text-sm cursor-pointer">Reset Seeker Filters</button>
         </div>`;
+      renderSeekersPagination(0, 0);
       return;
     }
 
-    grid.innerHTML = items.map(req => `
+    const startIdx = (currentSeekersPage - 1) * SEEKERS_PER_PAGE;
+    const endIdx = Math.min(startIdx + SEEKERS_PER_PAGE, totalMatching);
+    const pageItems = loadedSeekersCache.slice(startIdx, endIdx);
+
+    if (totalPages === 1) {
+      countEl.innerText = `Showing ${totalMatching} seeker request${totalMatching === 1 ? '' : 's'}`;
+    } else {
+      countEl.innerText = `Showing ${startIdx + 1}–${endIdx} of ${totalMatching} seeker requests (Page ${currentSeekersPage} of ${totalPages})`;
+    }
+
+    grid.innerHTML = pageItems.map(req => `
       <div class="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-xs hover:shadow-lg transition-all flex flex-col justify-between p-5 space-y-4">
         <div>
           <div class="flex items-start justify-between gap-2 mb-2">
@@ -2539,16 +2873,111 @@ async function loadSeekers() {
         </div>
 
         <div class="pt-3 border-t border-slate-100 space-y-2">
-          <button onclick="contactRoomSeeker('${req._id}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm py-2.5 rounded-xl transition text-center shadow-xs flex items-center justify-center gap-2">
+          <button onclick="contactRoomSeeker('${req._id}')" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm py-2.5 rounded-xl transition text-center shadow-xs flex items-center justify-center gap-2 cursor-pointer">
             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
             <span>WhatsApp This Tenant</span>
           </button>
         </div>
       </div>
     `).join('');
+
+    renderSeekersPagination(totalMatching, totalPages);
   } catch (e) {
     if (grid) grid.removeAttribute('aria-busy');
     countEl.innerText = 'Failed to load requests.';
+  }
+}
+
+// Render pagination navigation controls for room seekers
+function renderSeekersPagination(totalMatching, totalPages) {
+  const container = document.getElementById('seekersPagination');
+  if (!container) return;
+
+  if (totalMatching === 0 || totalPages <= 1) {
+    container.innerHTML = '';
+    container.classList.add('hidden');
+    return;
+  }
+
+  container.classList.remove('hidden');
+
+  let pageButtonsHtml = '';
+  const maxButtons = 5;
+  let startPage = Math.max(1, currentSeekersPage - 2);
+  let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+  if (endPage - startPage + 1 < maxButtons) {
+    startPage = Math.max(1, endPage - maxButtons + 1);
+  }
+
+  if (startPage > 1) {
+    pageButtonsHtml += `
+      <button type="button" onclick="changeSeekersPage(1)" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-xs sm:text-sm font-bold bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 transition flex items-center justify-center cursor-pointer shadow-2xs" title="Page 1">1</button>
+    `;
+    if (startPage > 2) {
+      pageButtonsHtml += `<span class="px-1 text-center text-slate-400 font-bold text-xs">…</span>`;
+    }
+  }
+
+  for (let p = startPage; p <= endPage; p++) {
+    if (p === currentSeekersPage) {
+      pageButtonsHtml += `
+        <button type="button" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-xs sm:text-sm font-black bg-emerald-600 text-white shadow-sm flex items-center justify-center cursor-default" aria-current="page">${p}</button>
+      `;
+    } else {
+      pageButtonsHtml += `
+        <button type="button" onclick="changeSeekersPage(${p})" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-xs sm:text-sm font-bold bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 transition flex items-center justify-center cursor-pointer shadow-2xs" title="Page ${p}">${p}</button>
+      `;
+    }
+  }
+
+  if (endPage < totalPages) {
+    if (endPage < totalPages - 1) {
+      pageButtonsHtml += `<span class="px-1 text-center text-slate-400 font-bold text-xs">…</span>`;
+    }
+    pageButtonsHtml += `
+      <button type="button" onclick="changeSeekersPage(${totalPages})" class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-xs sm:text-sm font-bold bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 transition flex items-center justify-center cursor-pointer shadow-2xs" title="Page ${totalPages}">${totalPages}</button>
+    `;
+  }
+
+  const isFirst = currentSeekersPage === 1;
+  const isLast = currentSeekersPage === totalPages;
+
+  container.innerHTML = `
+    <div class="flex flex-col items-center gap-3 py-4 border-t border-slate-200/80">
+      <div class="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+        <button type="button" 
+                onclick="changeSeekersPage(${currentSeekersPage - 1})" 
+                class="px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition ${isFirst ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60' : 'bg-white text-slate-800 hover:bg-slate-100 border border-slate-200 cursor-pointer shadow-2xs'}" 
+                ${isFirst ? 'disabled' : ''}>
+          <span>←</span> <span>Previous</span>
+        </button>
+
+        <div class="flex items-center gap-1 sm:gap-1.5">
+          ${pageButtonsHtml}
+        </div>
+
+        <button type="button" 
+                onclick="changeSeekersPage(${currentSeekersPage + 1})" 
+                class="px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition ${isLast ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-60' : 'bg-white text-slate-800 hover:bg-slate-100 border border-slate-200 cursor-pointer shadow-2xs'}" 
+                ${isLast ? 'disabled' : ''}>
+          <span>Next</span> <span>→</span>
+        </button>
+      </div>
+
+      <div class="text-xs text-slate-500 font-medium">
+        Showing page <strong class="text-slate-800">${currentSeekersPage}</strong> of <strong class="text-slate-800">${totalPages}</strong> • <span class="text-slate-600 font-semibold">${totalMatching} total requests</span> (10 requests per page)
+      </div>
+    </div>
+  `;
+}
+
+function changeSeekersPage(newPage) {
+  if (newPage < 1) return;
+  currentSeekersPage = newPage;
+  loadSeekers(false);
+  const target = document.getElementById('seekersView');
+  if (target) {
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 }
 
@@ -2817,14 +3246,14 @@ function resetListingFilters() {
   filterOnlyFavorites = false;
   const btn = document.getElementById('filterOnlySavedBtn');
   if (btn) btn.className = 'text-xs font-bold px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition flex items-center gap-1';
-  loadListings();
+  loadListings(true);
 }
 
 function resetSeekerFilters() {
   document.getElementById('seekerSuburbFilter').value = '';
   document.getElementById('seekerBudgetFilter').value = '';
   document.getElementById('seekerTypeFilter').value = 'All';
-  loadSeekers();
+  loadSeekers(true);
 }
 
 function resetAllFilters() {
@@ -3382,7 +3811,7 @@ async function handleInitialSubmit(e) {
     
     switchTab('listings');
     if (typeof loadListings === 'function') {
-      loadListings();
+      loadListings(true);
     }
   } catch (err) {
     clearTimeout(timeoutId);
@@ -3587,7 +4016,7 @@ async function handleVerifyOtp() {
     
     // Refresh listings list
     if (typeof loadListings === 'function') {
-      loadListings();
+      loadListings(true);
     }
   } catch (err) {
     errEl.innerText = 'Network error. Please try again.';
@@ -3606,45 +4035,123 @@ async function handleVerifyOtp() {
 let uploadedPhotoData = '';
 let isPhotoProcessing = false;
 let photoProcessingPromise = null;
+let currentPhotoRequestId = 0;
+let lastSelectedPhotoFile = null;
 
-function setPhotoProcessingUI(isProcessing, statusMessage) {
-  const optimizingIndicator = document.getElementById('photoOptimizingIndicator');
+function setPhotoUploadState(state, message) {
+  const uploadArea = document.getElementById('imageUploadArea');
   const uploadPrompt = document.getElementById('uploadPromptContainer');
+  const uploadingIndicator = document.getElementById('photoUploadingIndicator');
+  const optimizingIndicator = document.getElementById('photoOptimizingIndicator');
+  const optimizingStatus = document.getElementById('photoOptimizingStatusText');
+  const errorContainer = document.getElementById('photoErrorContainer');
+  const errorMessage = document.getElementById('photoErrorMessage');
   const previewContainer = document.getElementById('imagePreviewContainer');
   const submitBtn = document.getElementById('btn-submit');
   const badge = document.getElementById('uploadStatusBadge');
 
-  if (isProcessing) {
-    if (optimizingIndicator) optimizingIndicator.classList.remove('hidden');
-    if (uploadPrompt) uploadPrompt.classList.add('hidden');
-    if (previewContainer) previewContainer.classList.add('hidden');
-    if (badge) {
-      badge.innerText = 'Optimizing Photo...';
-      badge.className = 'text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full';
-      badge.classList.remove('hidden');
-    }
-    if (submitBtn) {
-      submitBtn.disabled = true;
-      submitBtn.dataset.originalText = submitBtn.dataset.originalText || submitBtn.innerText;
-      submitBtn.innerText = '⏳ Optimizing Photo...';
-    }
-  } else {
-    if (optimizingIndicator) optimizingIndicator.classList.add('hidden');
-    if (submitBtn) {
-      submitBtn.disabled = false;
-      if (submitBtn.dataset.originalText) {
+  // Reset pulse styling on dropzone
+  if (uploadArea) {
+    uploadArea.classList.remove('photo-optimizing-pulse', 'ring-4', 'ring-rose-500/40', 'border-rose-500', 'bg-rose-50/40');
+  }
+
+  // Hide all state containers by default
+  if (uploadPrompt) uploadPrompt.classList.add('hidden');
+  if (uploadingIndicator) uploadingIndicator.classList.add('hidden');
+  if (optimizingIndicator) optimizingIndicator.classList.add('hidden');
+  if (errorContainer) errorContainer.classList.add('hidden');
+  if (previewContainer) previewContainer.classList.add('hidden');
+
+  switch (state) {
+    case 'empty':
+      if (uploadPrompt) uploadPrompt.classList.remove('hidden');
+      if (badge) badge.classList.add('hidden');
+      if (submitBtn && submitBtn.dataset.originalText) {
+        submitBtn.disabled = false;
         submitBtn.innerText = submitBtn.dataset.originalText;
       }
-    }
-    if (badge) {
-      if (uploadedPhotoData) {
-        badge.innerText = 'Photo Attached ✓';
+      break;
+
+    case 'uploading':
+      if (uploadingIndicator) uploadingIndicator.classList.remove('hidden');
+      if (badge) {
+        badge.innerText = 'Uploading photo...';
+        badge.className = 'text-[10px] bg-sky-100 text-sky-800 font-bold px-2 py-0.5 rounded-full';
+        badge.classList.remove('hidden');
+      }
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.dataset.originalText = submitBtn.dataset.originalText || submitBtn.innerText;
+        submitBtn.innerText = '⏳ Uploading Photo...';
+      }
+      break;
+
+    case 'optimizing':
+      if (optimizingIndicator) optimizingIndicator.classList.remove('hidden');
+      if (optimizingStatus) optimizingStatus.innerText = message || 'Optimizing photo...';
+      if (uploadArea) {
+        uploadArea.classList.add('photo-optimizing-pulse', 'ring-4', 'ring-rose-500/40', 'border-rose-500', 'bg-rose-50/40');
+      }
+      if (badge) {
+        badge.innerText = 'Optimizing Photo...';
+        badge.className = 'text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full';
+        badge.classList.remove('hidden');
+      }
+      if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.dataset.originalText = submitBtn.dataset.originalText || submitBtn.innerText;
+        submitBtn.innerText = '⏳ Optimizing Photo...';
+      }
+      break;
+
+    case 'success':
+      if (previewContainer) {
+        previewContainer.classList.remove('hidden');
+        previewContainer.classList.add('opacity-0', 'scale-95');
+        requestAnimationFrame(() => {
+          previewContainer.classList.remove('opacity-0', 'scale-95');
+          previewContainer.classList.add('opacity-100', 'scale-100');
+        });
+      }
+      if (badge) {
+        badge.innerText = 'Photo ready ✓';
         badge.className = 'text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full';
         badge.classList.remove('hidden');
-      } else {
-        badge.classList.add('hidden');
       }
-    }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        if (submitBtn.dataset.originalText) {
+          submitBtn.innerText = submitBtn.dataset.originalText;
+        }
+      }
+      break;
+
+    case 'failed':
+      if (errorContainer) errorContainer.classList.remove('hidden');
+      if (errorMessage) errorMessage.innerText = message || 'Could not process room photo.';
+      if (badge) {
+        badge.innerText = 'Photo Failed ✕';
+        badge.className = 'text-[10px] bg-red-100 text-red-800 font-bold px-2 py-0.5 rounded-full';
+        badge.classList.remove('hidden');
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        if (submitBtn.dataset.originalText) {
+          submitBtn.innerText = submitBtn.dataset.originalText;
+        }
+      }
+      break;
+  }
+}
+
+// Backwards compatibility wrapper for existing code
+function setPhotoProcessingUI(isProcessing, statusMessage) {
+  if (isProcessing) {
+    setPhotoUploadState('optimizing', statusMessage);
+  } else if (uploadedPhotoData) {
+    setPhotoUploadState('success');
+  } else {
+    setPhotoUploadState('empty');
   }
 }
 
@@ -3652,8 +4159,19 @@ function handleImageUploadAreaClick(event) {
   if (event.target.closest('button') || event.target.closest('input') || event.target.closest('a')) {
     return;
   }
+  if (uploadedPhotoData && !isPhotoProcessing) {
+    return;
+  }
   triggerPhotoSelect();
 }
+
+// ==========================================
+// REAL DEVICE CAMERA CONTROLS & STREAM ENGINE
+// ==========================================
+let realDeviceCameraStream = null;
+let currentCameraFacingMode = 'environment'; // Default to rear camera on mobile for room photography
+let tempCapturedSnapshotDataUrl = null;
+let isCameraStreamRunning = false;
 
 function triggerPhotoSelect() {
   const input = document.getElementById('roomPhotoFileInput');
@@ -3664,10 +4182,343 @@ function triggerPhotoSelect() {
 }
 
 function triggerCameraCapture() {
+  openRealDeviceCamera();
+}
+
+function openRealDeviceCamera() {
+  const hasGetUserMedia = !!(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
+  
+  // If browser/device supports WebRTC getUserMedia, open viewfinder modal
+  if (hasGetUserMedia) {
+    const modal = document.getElementById('cameraCaptureModal');
+    if (modal) {
+      modal.classList.remove('hidden');
+      document.body.classList.add('overflow-hidden');
+    }
+
+    // Reset snapshot review state back to live mode
+    tempCapturedSnapshotDataUrl = null;
+    const capturedImg = document.getElementById('cameraCapturedImg');
+    if (capturedImg) {
+      capturedImg.src = '';
+      capturedImg.classList.add('hidden');
+    }
+    const video = document.getElementById('cameraStreamVideo');
+    if (video) video.classList.remove('hidden');
+
+    const guides = document.getElementById('cameraFramingGuides');
+    if (guides) guides.classList.remove('hidden');
+
+    const liveControls = document.getElementById('cameraLiveControls');
+    if (liveControls) liveControls.classList.remove('hidden');
+
+    const reviewControls = document.getElementById('cameraReviewControls');
+    if (reviewControls) reviewControls.classList.add('hidden');
+
+    const errorOverlay = document.getElementById('cameraErrorOverlay');
+    if (errorOverlay) errorOverlay.classList.add('hidden');
+
+    const loadingIndicator = document.getElementById('cameraLoadingIndicator');
+    if (loadingIndicator) loadingIndicator.classList.remove('hidden');
+
+    startDeviceCameraStream();
+  } else {
+    // Graceful fallback for environments/browsers lacking getUserMedia
+    triggerNativeCameraInput();
+  }
+}
+
+async function startDeviceCameraStream() {
+  stopActiveMediaTracks();
+
+  const loadingIndicator = document.getElementById('cameraLoadingIndicator');
+  if (loadingIndicator) loadingIndicator.classList.remove('hidden');
+
+  const errorOverlay = document.getElementById('cameraErrorOverlay');
+  if (errorOverlay) errorOverlay.classList.add('hidden');
+
+  let stream = null;
+
+  // 1. Try high-definition with desired facing mode (environment for rooms)
+  const preferredConstraints = {
+    video: {
+      facingMode: { ideal: currentCameraFacingMode },
+      width: { ideal: 1920, min: 640 },
+      height: { ideal: 1080, min: 480 }
+    },
+    audio: false
+  };
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia(preferredConstraints);
+  } catch (err1) {
+    console.warn('[Camera] Ideal constraints attempt notice:', err1.name, err1.message);
+    // 2. Fallback to basic facingMode constraint
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: currentCameraFacingMode },
+        audio: false
+      });
+    } catch (err2) {
+      console.warn('[Camera] FacingMode constraint attempt notice:', err2.name, err2.message);
+      // 3. Fallback to any available video stream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+      } catch (err3) {
+        handleCameraError(err3);
+        return;
+      }
+    }
+  }
+
+  realDeviceCameraStream = stream;
+  isCameraStreamRunning = true;
+
+  const video = document.getElementById('cameraStreamVideo');
+  if (video) {
+    video.srcObject = stream;
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
+    try {
+      await video.play();
+    } catch (playErr) {
+      console.warn('[Camera] Video play notice:', playErr.message);
+    }
+  }
+
+  if (loadingIndicator) loadingIndicator.classList.add('hidden');
+
+  checkCameraCapabilities();
+}
+
+function handleCameraError(err) {
+  console.error('[Camera] Access error:', err);
+  const loading = document.getElementById('cameraLoadingIndicator');
+  if (loading) loading.classList.add('hidden');
+
+  const errorOverlay = document.getElementById('cameraErrorOverlay');
+  const errorTitle = document.getElementById('cameraErrorTitle');
+  const errorMessage = document.getElementById('cameraErrorMessage');
+
+  if (errorOverlay) errorOverlay.classList.remove('hidden');
+
+  const errName = err ? (err.name || '') : '';
+  if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
+    if (errorTitle) errorTitle.innerText = 'Camera Permission Required';
+    if (errorMessage) errorMessage.innerText = 'Camera access was denied. Please allow camera access in your browser or device permissions to photograph the room.';
+  } else if (errName === 'NotFoundError' || errName === 'DevicesNotFoundError') {
+    if (errorTitle) errorTitle.innerText = 'No Camera Detected';
+    if (errorMessage) errorMessage.innerText = 'No camera hardware was detected on this device. You can choose a photo from your phone gallery or files.';
+  } else if (errName === 'NotReadableError' || errName === 'TrackStartError') {
+    if (errorTitle) errorTitle.innerText = 'Camera In Use';
+    if (errorMessage) errorMessage.innerText = 'The camera may be in use by another app or browser tab. Please close other apps and try again.';
+  } else {
+    if (errorTitle) errorTitle.innerText = 'Camera Unavailable';
+    if (errorMessage) errorMessage.innerText = err.message || 'Unable to start camera stream. You can choose a photo from your gallery instead.';
+  }
+}
+
+function stopActiveMediaTracks() {
+  if (realDeviceCameraStream) {
+    try {
+      realDeviceCameraStream.getTracks().forEach(track => {
+        try { track.stop(); } catch (_) {}
+      });
+    } catch (_) {}
+    realDeviceCameraStream = null;
+  }
+  isCameraStreamRunning = false;
+  const video = document.getElementById('cameraStreamVideo');
+  if (video) {
+    video.srcObject = null;
+  }
+}
+
+function closeRealDeviceCameraModal(preservePhoto = true) {
+  stopActiveMediaTracks();
+  tempCapturedSnapshotDataUrl = null;
+
+  const modal = document.getElementById('cameraCaptureModal');
+  if (modal) modal.classList.add('hidden');
+
+  const openModals = document.querySelectorAll('.modal-backdrop:not(.hidden)');
+  if (openModals.length === 0) {
+    document.body.classList.remove('overflow-hidden');
+  }
+
+  // preservePhoto ensures any previously selected room photo remains intact
+  if (!preservePhoto) {
+    // If explicitly clearing photo
+  }
+}
+
+function handleCameraBackdropClick(event) {
+  if (event.target.id === 'cameraCaptureModal') {
+    closeRealDeviceCameraModal(true);
+  }
+}
+
+async function flipDeviceCamera() {
+  currentCameraFacingMode = currentCameraFacingMode === 'environment' ? 'user' : 'environment';
+  await startDeviceCameraStream();
+}
+
+async function checkCameraCapabilities() {
+  const flipBtn = document.getElementById('cameraFlipBtn');
+  if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+    if (flipBtn) flipBtn.classList.remove('hidden');
+    return;
+  }
+
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const videoInputs = devices.filter(d => d.kind === 'videoinput');
+    if (flipBtn) {
+      if (videoInputs.length > 1) {
+        flipBtn.classList.remove('hidden');
+      } else {
+        // Single camera device
+        flipBtn.classList.remove('hidden'); // keep accessible for facing-mode toggle
+      }
+    }
+  } catch (_) {}
+}
+
+function takeCameraSnapshot() {
+  const video = document.getElementById('cameraStreamVideo');
+  if (!video || !isCameraStreamRunning) {
+    showToast('Camera is not ready yet', 'info');
+    return;
+  }
+
+  const vWidth = video.videoWidth;
+  const vHeight = video.videoHeight;
+  if (!vWidth || !vHeight) {
+    showToast('Initializing camera sensor, please wait a moment...', 'info');
+    return;
+  }
+
+  // Visual shutter flash effect
+  const flash = document.getElementById('cameraFlashOverlay');
+  if (flash) {
+    flash.classList.remove('hidden', 'opacity-0');
+    flash.classList.add('opacity-90');
+    setTimeout(() => {
+      flash.classList.remove('opacity-90');
+      flash.classList.add('opacity-0');
+      setTimeout(() => flash.classList.add('hidden'), 150);
+    }, 100);
+  }
+
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = vWidth;
+    canvas.height = vHeight;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) {
+      showToast('Could not capture frame from camera', 'error');
+      return;
+    }
+
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, vWidth, vHeight);
+    ctx.drawImage(video, 0, 0, vWidth, vHeight);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    if (!dataUrl || !dataUrl.startsWith('data:image/jpeg') || dataUrl.length < 500) {
+      showToast('Photo capture failed. Please try again.', 'error');
+      return;
+    }
+
+    tempCapturedSnapshotDataUrl = dataUrl;
+
+    // Show captured snapshot in viewfinder
+    const capturedImg = document.getElementById('cameraCapturedImg');
+    if (capturedImg) {
+      capturedImg.src = dataUrl;
+      capturedImg.classList.remove('hidden');
+    }
+    video.classList.add('hidden');
+
+    const guides = document.getElementById('cameraFramingGuides');
+    if (guides) guides.classList.add('hidden');
+
+    // Toggle controls to Review mode (Retake / Use This Photo)
+    const liveControls = document.getElementById('cameraLiveControls');
+    if (liveControls) liveControls.classList.add('hidden');
+    const reviewControls = document.getElementById('cameraReviewControls');
+    if (reviewControls) reviewControls.classList.remove('hidden');
+
+  } catch (err) {
+    console.error('[takeCameraSnapshot] Error:', err);
+    showToast('Failed to take camera photo', 'error');
+  }
+}
+
+function retakeCameraSnapshot() {
+  tempCapturedSnapshotDataUrl = null;
+  const capturedImg = document.getElementById('cameraCapturedImg');
+  if (capturedImg) {
+    capturedImg.src = '';
+    capturedImg.classList.add('hidden');
+  }
+  const video = document.getElementById('cameraStreamVideo');
+  if (video) video.classList.remove('hidden');
+
+  const guides = document.getElementById('cameraFramingGuides');
+  if (guides) guides.classList.remove('hidden');
+
+  const reviewControls = document.getElementById('cameraReviewControls');
+  if (reviewControls) reviewControls.classList.add('hidden');
+  const liveControls = document.getElementById('cameraLiveControls');
+  if (liveControls) liveControls.classList.remove('hidden');
+}
+
+function confirmCameraSnapshot() {
+  if (!tempCapturedSnapshotDataUrl) {
+    showToast('No photo captured. Please snap a photo first.', 'info');
+    return;
+  }
+
+  const finalPhotoData = tempCapturedSnapshotDataUrl;
+  closeRealDeviceCameraModal(false);
+
+  // Send captured photo into the validation, optimization & preview pipeline
+  processCapturedCameraPhoto(finalPhotoData);
+}
+
+function processCapturedCameraPhoto(dataUrl) {
+  if (!dataUrl) return;
+
+  const blob = dataURItoBlob(dataUrl);
+  if (!blob) {
+    showToast('Invalid photo format', 'error');
+    return;
+  }
+
+  const cameraFile = new File([blob], `room_camera_${Date.now()}.jpg`, {
+    type: 'image/jpeg',
+    lastModified: Date.now()
+  });
+
+  processPhotoFile(cameraFile);
+}
+
+function chooseFromGalleryFromCamera() {
+  closeRealDeviceCameraModal(true);
+  triggerPhotoSelect();
+}
+
+function triggerNativeCameraInput() {
+  closeRealDeviceCameraModal(true);
   const input = document.getElementById('roomPhotoCameraInput');
   if (input) {
     input.value = '';
     input.click();
+    showToast('Opening device camera...', 'info');
   } else {
     triggerPhotoSelect();
   }
@@ -3693,10 +4544,13 @@ function clearPresetSelectionHighlight() {
 }
 
 function selectPresetPhoto(url, label) {
+  currentPhotoRequestId++;
   uploadedPhotoData = url;
+  lastSelectedPhotoFile = null;
   const newImageInput = document.getElementById('newImage');
   if (newImageInput) newImageInput.value = url;
   displayPhotoPreview(url, label);
+  setPhotoUploadState('success');
   highlightSelectedPreset(url);
   showToast(`Attached sample photo: ${label}`, 'success');
   console.log('[selectPresetPhoto] Selected sample room photo:', { url, label });
@@ -3705,6 +4559,28 @@ function selectPresetPhoto(url, label) {
 function handleRoomPhotoFileSelected(input) {
   if (input.files && input.files[0]) {
     processPhotoFile(input.files[0]);
+  }
+}
+
+function resetPhotoUploadState() {
+  uploadedPhotoData = '';
+  lastSelectedPhotoFile = null;
+  currentPhotoRequestId++;
+  const fileInput = document.getElementById('roomPhotoFileInput');
+  if (fileInput) fileInput.value = '';
+  const cameraInput = document.getElementById('roomPhotoCameraInput');
+  if (cameraInput) cameraInput.value = '';
+  const newImage = document.getElementById('newImage');
+  if (newImage) newImage.value = '';
+  clearPresetSelectionHighlight();
+  setPhotoUploadState('empty');
+}
+
+function retryLastPhotoProcessing() {
+  if (lastSelectedPhotoFile) {
+    processPhotoFile(lastSelectedPhotoFile);
+  } else {
+    triggerPhotoSelect();
   }
 }
 
@@ -3752,10 +4628,61 @@ function resizeAndCompressImage(file) {
       reader.readAsDataURL(file);
     };
 
+    // Yield execution to allow UI animation frames to render smoothly
     setTimeout(async () => {
       let objectUrl = null;
       try {
         console.log('[resizeAndCompressImage] Reading image file:', file.name, `(${Math.round(file.size / 1024)} KB, ${file.type})`);
+        
+        // Fast-path: Use window.createImageBitmap if available (decodes on a background thread!)
+        if ('createImageBitmap' in window) {
+          try {
+            const bitmap = await createImageBitmap(file);
+            const srcWidth = bitmap.width;
+            const srcHeight = bitmap.height;
+
+            if (srcWidth && srcHeight) {
+              const MAX_W = 960;
+              const MAX_H = 720;
+              let width = srcWidth;
+              let height = srcHeight;
+
+              if (width > height) {
+                if (width > MAX_W) {
+                  height = Math.round(height * (MAX_W / width));
+                  width = MAX_W;
+                }
+              } else {
+                if (height > MAX_H) {
+                  width = Math.round(width * (MAX_H / height));
+                  height = MAX_H;
+                }
+              }
+
+              const canvas = document.createElement('canvas');
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d', { alpha: false });
+              if (ctx) {
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, width, height);
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                ctx.drawImage(bitmap, 0, 0, width, height);
+                bitmap.close();
+
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+                if (dataUrl && dataUrl.startsWith('data:image/jpeg') && dataUrl.length > 200) {
+                  resolve(dataUrl);
+                  return;
+                }
+              }
+            }
+          } catch (bitmapErr) {
+            console.log('[resizeAndCompressImage] ImageBitmap notice, using standard image decoding:', bitmapErr.message);
+          }
+        }
+
         objectUrl = URL.createObjectURL(file);
         const img = new Image();
 
@@ -3810,7 +4737,7 @@ function resizeAndCompressImage(file) {
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
 
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
 
         if (dataUrl && dataUrl.startsWith('data:image/jpeg') && dataUrl.length > 200) {
           console.log('[resizeAndCompressImage] Resized successfully:', {
@@ -3830,7 +4757,7 @@ function resizeAndCompressImage(file) {
           try { URL.revokeObjectURL(objectUrl); } catch (_) {}
         }
       }
-    }, 20);
+    }, 40);
   });
 }
 
@@ -3842,7 +4769,6 @@ async function uploadPhotoToFirebaseStorage(dataUrl, file) {
   }
 
   try {
-    setPhotoProcessingUI(true, 'Attaching room photo...');
     let blob = dataURItoBlob(dataUrl);
     if (!blob) {
       try {
@@ -3897,64 +4823,88 @@ async function uploadPhotoToFirebaseStorage(dataUrl, file) {
 
 async function processPhotoFile(file) {
   if (!file) return;
-  if (!file.type || !file.type.startsWith('image/')) {
-    const name = (file.name || '').toLowerCase();
-    const isImgExt = name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png') || name.endsWith('.webp') || name.endsWith('.gif') || name.endsWith('.bmp') || name.endsWith('.heic');
-    if (!isImgExt) {
-      showToast('Please select an image file (JPG, PNG, WEBP).', 'error');
-      return;
-    }
+
+  lastSelectedPhotoFile = file;
+
+  // File type validation
+  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.heic'];
+  const name = (file.name || '').toLowerCase();
+  const hasAllowedExt = allowedExtensions.some(ext => name.endsWith(ext));
+  const isImageMime = file.type && file.type.startsWith('image/');
+  
+  if (!isImageMime && !hasAllowedExt) {
+    setPhotoUploadState('failed', 'Invalid file type. Please choose a JPG, PNG, or WEBP image.');
+    showToast('Please select a valid image file (JPG, PNG, WEBP).', 'error');
+    return;
   }
 
+  // Size limit validation (25MB ceiling)
   if (file.size > 25 * 1024 * 1024) {
+    setPhotoUploadState('failed', 'The selected image is larger than 25MB. Please choose a smaller photo.');
     showToast('Image is larger than 25MB. Please choose a smaller photo.', 'error');
     return;
   }
 
-  console.log('[processPhotoFile] Starting image processing workflow for:', file.name);
+  // Race condition protection: unique operation ID
+  const requestId = ++currentPhotoRequestId;
   isPhotoProcessing = true;
-  setPhotoProcessingUI(true, 'Optimizing room picture...');
   clearPresetSelectionHighlight();
+
+  console.log('[processPhotoFile] Initiating photo upload pipeline for:', file.name, `[Operation ID: ${requestId}]`);
+
+  // State 2: Uploading
+  setPhotoUploadState('uploading');
+
+  // Yield to UI thread to ensure upload state renders cleanly
+  await new Promise(r => setTimeout(r, 60));
+  if (requestId !== currentPhotoRequestId) {
+    console.log('[processPhotoFile] Operation canceled by newer request:', requestId);
+    return;
+  }
+
+  // State 3: Optimizing (with subtle pulse animation around preview area)
+  setPhotoUploadState('optimizing', 'Optimizing photo...');
 
   try {
     photoProcessingPromise = resizeAndCompressImage(file);
     const verifiedDataUrl = await photoProcessingPromise;
 
-    if (verifiedDataUrl) {
-      // Immediate responsive UI preview
-      displayPhotoPreview(verifiedDataUrl, file.name);
+    // Check race condition again after async compression
+    if (requestId !== currentPhotoRequestId) {
+      console.log('[processPhotoFile] Stale image discarded:', requestId);
+      return;
+    }
 
-      // Upload directly to server/Firebase Storage in background
-      const storageUrl = await uploadPhotoToFirebaseStorage(verifiedDataUrl, file);
-      uploadedPhotoData = storageUrl || verifiedDataUrl;
+    if (!verifiedDataUrl) {
+      throw new Error('Image could not be compressed');
+    }
 
-      const badge = document.getElementById('uploadStatusBadge');
-      if (badge) {
-        badge.innerText = 'Photo Attached ✓';
-        badge.className = 'text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full';
-        badge.classList.remove('hidden');
+    // State 4: Successfully processed with smooth transition
+    displayPhotoPreview(verifiedDataUrl, file.name);
+    setPhotoUploadState('success');
+    uploadedPhotoData = verifiedDataUrl;
+    showToast('Room picture optimized & attached! 📸', 'success');
+
+    // Asynchronous background upload to Firebase Storage
+    uploadPhotoToFirebaseStorage(verifiedDataUrl, file).then(storageUrl => {
+      if (requestId === currentPhotoRequestId && storageUrl) {
+        uploadedPhotoData = storageUrl;
+        console.log('[processPhotoFile] Attached permanent Storage URL:', storageUrl);
       }
-      console.log('[processPhotoFile] Photo successfully ready and attached:', uploadedPhotoData.slice(0, 50));
-      showToast('Room picture attached successfully! 📸', 'success');
-    }
+    }).catch(e => {
+      console.warn('[processPhotoFile] Background storage notice:', e.message);
+    });
+
   } catch (err) {
-    console.error('[processPhotoFile] Notice during photo processing:', err);
-    try {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        uploadedPhotoData = e.target.result;
-        displayPhotoPreview(uploadedPhotoData, file.name);
-        showToast('Photo attached! 📸', 'success');
-      };
-      reader.readAsDataURL(file);
-    } catch (_) {
-      selectPresetPhoto('/images/township_backroom.jpg', 'Township Backroom (Sample)');
-      showToast('Sample room photo attached as fallback.', 'info');
-    }
+    if (requestId !== currentPhotoRequestId) return;
+    console.error('[processPhotoFile] Optimization error:', err);
+    setPhotoUploadState('failed', err.message || 'Photo optimization failed. Please retry.');
+    showToast('Failed to process photo. Please retry or choose another.', 'error');
   } finally {
-    isPhotoProcessing = false;
-    photoProcessingPromise = null;
-    setPhotoProcessingUI(false);
+    if (requestId === currentPhotoRequestId) {
+      isPhotoProcessing = false;
+      photoProcessingPromise = null;
+    }
   }
 }
 
@@ -3966,7 +4916,9 @@ function displayPhotoPreview(src, name) {
   const badge = document.getElementById('uploadStatusBadge');
 
   if (promptContainer) promptContainer.classList.add('hidden');
-  if (previewContainer) previewContainer.classList.remove('hidden');
+  if (previewContainer) {
+    previewContainer.classList.remove('hidden');
+  }
   if (previewImg) {
     previewImg.src = src;
     previewImg.onerror = function() {
@@ -3975,8 +4927,10 @@ function displayPhotoPreview(src, name) {
     };
   }
   if (fileNameEl) fileNameEl.innerText = name || 'Room Photo';
+  const photoReadyLabel = document.getElementById('photoReadyLabel');
+  if (photoReadyLabel) photoReadyLabel.innerText = '✓ Photo ready';
   if (badge) {
-    badge.innerText = 'Photo Attached ✓';
+    badge.innerText = 'Photo ready ✓';
     badge.className = 'text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full';
     badge.classList.remove('hidden');
   }
@@ -3986,27 +4940,22 @@ function removeUploadedPhoto() {
   uploadedPhotoData = '';
   isPhotoProcessing = false;
   photoProcessingPromise = null;
+  lastSelectedPhotoFile = null;
+  currentPhotoRequestId++;
+
   const fileInput = document.getElementById('roomPhotoFileInput');
   if (fileInput) fileInput.value = '';
   const cameraInput = document.getElementById('roomPhotoCameraInput');
   if (cameraInput) cameraInput.value = '';
-  
   const newImageInput = document.getElementById('newImage');
   if (newImageInput) newImageInput.value = '';
 
-  clearPresetSelectionHighlight();
-  setPhotoProcessingUI(false);
-
-  const promptContainer = document.getElementById('uploadPromptContainer');
-  const previewContainer = document.getElementById('imagePreviewContainer');
   const previewImg = document.getElementById('roomPhotoPreviewImg');
-  const badge = document.getElementById('uploadStatusBadge');
-
-  if (promptContainer) promptContainer.classList.remove('hidden');
-  if (previewContainer) previewContainer.classList.add('hidden');
   if (previewImg) previewImg.src = '';
-  if (badge) badge.classList.add('hidden');
-  console.log('[removeUploadedPhoto] Photo removed and upload state reset.');
+
+  clearPresetSelectionHighlight();
+  setPhotoUploadState('empty');
+  showToast('Photo removed.', 'info');
 }
 
 // Photo Lightbox modal viewer controls

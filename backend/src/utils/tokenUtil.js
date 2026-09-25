@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config');
+const tokenRevocationStore = require('../security/tokenRevocationStore');
 
 class TokenUtil {
   static getValidTimespan(val, fallback) {
@@ -27,6 +28,10 @@ class TokenUtil {
   }
 
   static verifyAccessToken(token) {
+    if (!token || typeof token !== 'string') return null;
+    if (tokenRevocationStore.isRevoked(token)) {
+      return null;
+    }
     try {
       const secret = (config.jwt && config.jwt.secret) || process.env.JWT_SECRET;
       if (!secret) return null;
@@ -37,12 +42,22 @@ class TokenUtil {
   }
 
   static verifyRefreshToken(token) {
+    if (!token || typeof token !== 'string') return null;
+    if (tokenRevocationStore.isRevoked(token)) {
+      return null;
+    }
     try {
       const secret = (config.jwt && config.jwt.refreshSecret) || process.env.JWT_REFRESH_SECRET || (config.jwt && config.jwt.secret);
       if (!secret) return null;
       return jwt.verify(token, secret);
     } catch (err) {
       return null;
+    }
+  }
+
+  static revokeToken(token) {
+    if (token) {
+      tokenRevocationStore.revoke(token);
     }
   }
 }

@@ -158,10 +158,8 @@ function errorHandler(err, req, res, next) {
 
   // 9. Unhandled 500 Server Errors
   statusCode = 500;
-  if (!isDev) {
-    message = 'An unexpected internal server error occurred. Please try again later.';
-  }
-  errorCode = errorCode || 'INTERNAL_SERVER_ERROR';
+  message = 'Something went wrong on our side. Please try again later.';
+  errorCode = 'SERVER_ERROR';
 
   return ApiResponse.error(res, message, statusCode, errors, errorCode);
 }

@@ -30,7 +30,25 @@ function authenticate(req, res, next) {
 
   const decoded = TokenUtil.verifyAccessToken(token);
   if (!decoded) {
-    return ApiResponse.error(res, 'Invalid or expired session. Please log in again.', 401);
+    return ApiResponse.error(res, 'Invalid, expired, or revoked session. Please log in again.', 401);
+  }
+
+  // Enforce blocked account defense
+  const userId = decoded.id || decoded._id || decoded.userId || decoded.landlordId;
+  if (userId) {
+    try {
+      const fallbackStore = require('../../../services/fallbackStore');
+      if (fallbackStore) {
+        const fbL = (fallbackStore.fallbackLandlords || []).find(l => String(l._id) === String(userId));
+        if (fbL && fbL.isBlocked) {
+          return ApiResponse.error(res, 'Your account has been blocked by administration.', 403);
+        }
+        const fbU = (fallbackStore.fallbackUsers || []).find(u => String(u._id) === String(userId));
+        if (fbU && (fbU.isBlocked || fbU.status === 'BLOCKED' || fbU.status === 'blocked')) {
+          return ApiResponse.error(res, 'Your account has been blocked by administration.', 403);
+        }
+      }
+    } catch (_) {}
   }
 
   req.user = decoded;
@@ -98,18 +116,24 @@ function requireAdmin(req, res, next) {
 
   if (token) {
     const decoded = TokenUtil.verifyAccessToken(token);
-    if (decoded && (decoded.admin === true || decoded.role === ROLES.ADMIN || decoded.role === ROLES.SUPER_ADMIN)) {
-      req.user = decoded;
-      return next();
+    if (decoded) {
+      if (decoded.admin === true || decoded.role === ROLES.ADMIN || decoded.role === ROLES.SUPER_ADMIN) {
+        req.user = decoded;
+        return next();
+      }
+      return ApiResponse.error(res, 'Forbidden: Administrator privileges required.', 403);
     }
   }
 
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const headerToken = authHeader.split(' ')[1];
     const decoded = TokenUtil.verifyAccessToken(headerToken);
-    if (decoded && (decoded.admin === true || decoded.role === ROLES.ADMIN || decoded.role === ROLES.SUPER_ADMIN)) {
-      req.user = decoded;
-      return next();
+    if (decoded) {
+      if (decoded.admin === true || decoded.role === ROLES.ADMIN || decoded.role === ROLES.SUPER_ADMIN) {
+        req.user = decoded;
+        return next();
+      }
+      return ApiResponse.error(res, 'Forbidden: Administrator privileges required.', 403);
     }
   }
 

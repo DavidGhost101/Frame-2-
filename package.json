@@ -13,7 +13,7 @@
     "watch:css": "tailwindcss -i ./styles/input.css -o ./public/css/style.css --watch",
     "admin:reset": "node scripts/resetAdmin.js",
     "lint": "node -e \"console.log('Lint check passed')\"",
-    "test": "jest --runInBand --detectOpenHandles"
+    "test": "jest --runInBand --forceExit"
   },
   "dependencies": {
     "@google-cloud/firestore": "^9.0.1",

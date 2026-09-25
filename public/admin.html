@@ -21,6 +21,9 @@
     if (event && typeof event.preventDefault === 'function') event.preventDefault();
   }, true);
 </script>
+<script src="/js/phoneUtils.js"></script>
+<script src="/js/toast.js"></script>
+<script src="/js/apiClient.js"></script>
 <style>
   body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; background: #0f172a; }
   .badge-active { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
@@ -362,18 +365,34 @@
           type="text" 
           id="auditSearchInput" 
           oninput="renderAuditLogs()" 
-          placeholder="Filter by actor, action, title, ID, IP address..." 
+          placeholder="Filter by actor, action, category, title, request ID, IP..." 
           class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-rose-500 flex-1 min-w-[200px]"
         />
+        <select id="auditCategoryFilter" onchange="renderAuditLogs()" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-rose-500">
+          <option value="all">All Categories</option>
+          <option value="AI">AI Tools</option>
+          <option value="ROOM">Rooms & Listings</option>
+          <option value="REQUEST">Room Requests</option>
+          <option value="USER">Users & Landlords</option>
+          <option value="SECURITY">Security & Auth</option>
+          <option value="SYSTEM">System & Server</option>
+        </select>
         <select id="auditActionFilter" onchange="renderAuditLogs()" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-rose-500">
           <option value="all">All Actions</option>
-          <option value="ADMIN_LOGIN">Admin Logins (Success)</option>
+          <option value="ADMIN_LOGIN">Admin Logins</option>
+          <option value="USER_LOGIN">User Logins</option>
+          <option value="USER_LOGOUT">Logouts</option>
           <option value="LOGIN_FAILURE">Login Failures</option>
           <option value="LISTING_APPROVED">Listing Approvals</option>
           <option value="LISTING_REJECTED">Listing Rejections</option>
           <option value="LISTING_SUSPENDED">Listing Suspensions</option>
-          <option value="LISTING_UPDATED">Listing Edits & Updates</option>
-          <option value="LISTING_DELETED">Listing Deletions</option>
+          <option value="ROOM_CREATED">Room Created</option>
+          <option value="ROOM_UPDATED">Room Updated</option>
+          <option value="ROOM_DELETED">Room Deleted</option>
+          <option value="ROOM_REQUEST_CREATED">Request Created</option>
+          <option value="ROOM_REQUEST_UPDATED">Request Updated</option>
+          <option value="ROOM_REQUEST_DELETED">Request Deleted</option>
+          <option value="AI_ADVISOR_QUERY">AI Advisor Queries</option>
         </select>
         <select id="auditStatusFilter" onchange="renderAuditLogs()" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-rose-500">
           <option value="all">All Outcomes</option>
@@ -387,6 +406,7 @@
           <option value="AdminAuth">AdminAuth</option>
           <option value="Landlord">Landlord</option>
           <option value="RoomRequest">RoomRequest</option>
+          <option value="AI">AI Service</option>
         </select>
       </div>
       <div class="flex items-center gap-2">
@@ -743,7 +763,15 @@ async function adminFetch(url, options = {}, retries = 1) {
     
     // If unauthorized, show login screen (unless silent)
     if ((response.status === 401 || response.status === 403) && !options.silent) {
+      if (window.AppToast) {
+        window.AppToast.auth(response.status === 403 ? 'Access forbidden: Admin credentials required.' : 'Administrative session expired. Please sign in again.');
+      }
       showLoginScreen('Administrative session expired. Please sign in again.');
+    } else if (response.status === 429 && !options.silent) {
+      const retryAfter = response.headers.get('Retry-After');
+      if (window.AppToast) {
+        window.AppToast.rateLimited('Admin API rate limit active. Please slow down.', retryAfter ? parseInt(retryAfter, 10) : null);
+      }
     }
     
     return response;
@@ -1268,6 +1296,21 @@ function initRealtimeSubscription() {
       }
     });
 
+    // 11. Audit Event Created
+    adminEventSource.addEventListener('audit:created', (e) => {
+      try {
+        const payload = JSON.parse(e.data || '{}');
+        const auditLog = payload.auditLog;
+        if (!auditLog) return;
+        auditCache.unshift(auditLog);
+        const badge = document.getElementById('badge-audit-count');
+        if (badge) badge.innerText = auditCache.length;
+        if (currentTab === 'audit') {
+          renderAuditLogs();
+        }
+      } catch (_) {}
+    });
+
   } catch (initErr) {
     console.warn('Failed to start EventSource:', initErr);
     updateRealtimeStatus('reconnecting', 'Live updates temporarily unavailable. Reconnecting...');
@@ -1440,25 +1483,55 @@ async function loadListings() {
   try {
     const res = await adminFetch(`/api/admin/listings?${params.toString()}`);
     const data = await res.json();
-    let listings = data.data || data.listings || [];
+    let rawListings = data.data || data.listings || [];
 
-    // Ensure client cache sorts by createdAt DESC
-    listings.sort((a, b) => {
+    // Strict client-side filter: exclude deleted items, "cheap room", and duplicates
+    const seenAdminIds = new Set();
+    const seenAdminSigs = new Set();
+    const cleanListings = [];
+    for (const l of rawListings) {
+      if (!l || l.isDeleted === true || l.status === 'deleted') continue;
+      const titleLower = (l.title || '').toLowerCase();
+      if (titleLower.includes('cheap room') || titleLower.startsWith('cheap room')) continue;
+      const idStr = String(l._id);
+      const sig = `${titleLower.trim()}|${(l.address || '').trim().toLowerCase()}|${(l.suburb || '').trim().toLowerCase()}`;
+      if (seenAdminIds.has(idStr) || (sig && seenAdminSigs.has(sig))) continue;
+      seenAdminIds.add(idStr);
+      if (sig) seenAdminSigs.add(sig);
+      cleanListings.push(l);
+    }
+
+    // Ensure client cache sorts by createdAt DESC: newest rooms first
+    cleanListings.sort((a, b) => {
       const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return timeB - timeA;
     });
 
-    listingsCache = listings;
-    document.getElementById('badge-listings-count').innerText = listings.length;
+    listingsCache = cleanListings;
+    document.getElementById('badge-listings-count').innerText = cleanListings.length;
 
     // Fetch all listings once to accurately compute pill counts across all statuses
     if (status === 'all' && !keyword) {
-      updatePillCounts(listings);
+      updatePillCounts(cleanListings);
     } else {
       adminFetch('/api/admin/listings?status=all&sortBy=createdAt&order=desc').then(r => r.json()).then(allData => {
-        const allList = allData.data || allData.listings || [];
-        updatePillCounts(allList);
+        const allRaw = allData.data || allData.listings || [];
+        const seenPillIds = new Set();
+        const seenPillSigs = new Set();
+        const allClean = [];
+        for (const l of allRaw) {
+          if (!l || l.isDeleted === true || l.status === 'deleted') continue;
+          const tLower = (l.title || '').toLowerCase();
+          if (tLower.includes('cheap room') || tLower.startsWith('cheap room')) continue;
+          const idStr = String(l._id);
+          const sig = `${tLower.trim()}|${(l.address || '').trim().toLowerCase()}|${(l.suburb || '').trim().toLowerCase()}`;
+          if (seenPillIds.has(idStr) || (sig && seenPillSigs.has(sig))) continue;
+          seenPillIds.add(idStr);
+          if (sig) seenPillSigs.add(sig);
+          allClean.push(l);
+        }
+        updatePillCounts(allClean);
       }).catch(() => {});
     }
 
@@ -1476,7 +1549,19 @@ function renderFilteredListings() {
   const keyword = (document.getElementById('listingSearchInput') ? document.getElementById('listingSearchInput').value : '').toLowerCase().trim();
 
   // Filter listings based on current status and search keyword
+  const seenFilterIds = new Set();
+  const seenFilterSigs = new Set();
   const visibleListings = listingsCache.filter(l => {
+    if (!l || l.isDeleted === true || l.status === 'deleted') return false;
+    const titleLower = (l.title || '').toLowerCase();
+    if (titleLower.includes('cheap room') || titleLower.startsWith('cheap room')) return false;
+
+    const idStr = String(l._id);
+    const sig = `${titleLower.trim()}|${(l.address || '').trim().toLowerCase()}|${(l.suburb || '').trim().toLowerCase()}`;
+    if (seenFilterIds.has(idStr) || (sig && seenFilterSigs.has(sig))) return false;
+    seenFilterIds.add(idStr);
+    if (sig) seenFilterSigs.add(sig);
+
     const isApproved = isListingApproved(l);
     const isPending = isListingPending(l);
     const isRejected = isListingRejected(l);
@@ -2181,7 +2266,22 @@ async function loadRequests() {
     const res = await adminFetch('/api/admin/room-requests');
     if (!res.ok) return;
     const data = await res.json();
-    requestsCache = data.data || data.requests || [];
+    const rawRequests = data.data || data.requests || [];
+
+    const seenReqIds = new Set();
+    const seenReqSigs = new Set();
+    const cleanReqs = [];
+    for (const r of rawRequests) {
+      if (!r || r.isDeleted === true || r.status === 'deleted' || r.status === 'archived') continue;
+      const idStr = String(r._id);
+      const sig = `${(r.seekerName||'').trim().toLowerCase()}|${(r.phone||'').trim().toLowerCase()}|${(r.suburb||'').trim().toLowerCase()}`;
+      if (seenReqIds.has(idStr) || (sig && seenReqSigs.has(sig))) continue;
+      seenReqIds.add(idStr);
+      if (sig) seenReqSigs.add(sig);
+      cleanReqs.push(r);
+    }
+
+    requestsCache = cleanReqs;
     document.getElementById('badge-requests-count').innerText = requestsCache.length;
     renderRequests();
   } catch (err) {
@@ -2194,7 +2294,16 @@ function renderRequests() {
   const search = (document.getElementById('requestSearchInput').value || '').toLowerCase();
   const statusFilter = document.getElementById('requestStatusFilter').value;
 
+  const seenReqIds = new Set();
+  const seenReqSigs = new Set();
   let list = requestsCache.filter(r => {
+    if (!r || r.isDeleted === true || r.status === 'deleted' || r.status === 'archived') return false;
+    const idStr = String(r._id);
+    const sig = `${(r.seekerName||'').trim().toLowerCase()}|${(r.phone||'').trim().toLowerCase()}|${(r.suburb||'').trim().toLowerCase()}`;
+    if (seenReqIds.has(idStr) || (sig && seenReqSigs.has(sig))) return false;
+    seenReqIds.add(idStr);
+    if (sig) seenReqSigs.add(sig);
+
     const name = (r.seekerName || '').toLowerCase();
     const suburb = (r.suburb || '').toLowerCase();
     const notes = (r.notes || '').toLowerCase();
@@ -2372,6 +2481,7 @@ function renderAuditLogs() {
   if (!table) return;
 
   const keyword = (document.getElementById('auditSearchInput')?.value || '').toLowerCase().trim();
+  const categoryFilter = document.getElementById('auditCategoryFilter')?.value || 'all';
   const actionFilter = document.getElementById('auditActionFilter')?.value || 'all';
   const statusFilter = document.getElementById('auditStatusFilter')?.value || 'all';
   const resourceFilter = document.getElementById('auditResourceFilter')?.value || 'all';
@@ -2380,7 +2490,9 @@ function renderAuditLogs() {
     const outcome = item.status || item.result || 'SUCCESS';
     const entity = item.resource || item.entityType || 'General';
     const action = item.action || '';
+    const category = item.category || 'OTHER';
 
+    if (categoryFilter !== 'all' && category !== categoryFilter) return false;
     if (statusFilter !== 'all' && outcome !== statusFilter) return false;
     if (actionFilter !== 'all' && action !== actionFilter) return false;
     if (resourceFilter !== 'all' && entity !== resourceFilter) return false;
@@ -2388,8 +2500,10 @@ function renderAuditLogs() {
     if (keyword) {
       const matchText = [
         action,
+        category,
         entity,
         item.resourceId,
+        item.requestId,
         item.entityId,
         item.entityTitle,
         item.actorEmail,
@@ -2401,7 +2515,9 @@ function renderAuditLogs() {
         item.details?.action,
         item.details?.failureReason,
         item.details?.method,
-        item.details?.path
+        item.details?.path,
+        item.details?.query,
+        item.details?.userQuestion
       ].filter(Boolean).join(' ').toLowerCase();
       if (!matchText.includes(keyword)) return false;
     }
@@ -2426,13 +2542,23 @@ function renderAuditLogs() {
     const method = log.details?.method || '';
     const path = log.details?.path || '';
     const duration = log.details?.responseTimeMs ? `${log.details.responseTimeMs}ms` : '';
-    const actor = 'Administrator';
+    const actor = log.actorEmail || log.userRole || log.details?.actorEmail || (log.userId ? `User #${String(log.userId).substring(0, 8)}` : 'System / Admin');
     const entity = log.resource || log.entityType || 'Listing';
     const entityId = log.resourceId || log.entityId || '';
     const title = log.entityTitle || log.details?.title || '';
     const reason = log.reason || log.details?.reason || '';
     const failureReason = log.failureReason || log.details?.failureReason || '';
     const changes = log.changes || log.details?.changes || null;
+    const category = log.category || 'OTHER';
+
+    // Category badge styling
+    let catBadgeClass = 'bg-slate-700/80 text-slate-300';
+    if (category === 'AI') catBadgeClass = 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30';
+    else if (category === 'ROOM') catBadgeClass = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+    else if (category === 'REQUEST') catBadgeClass = 'bg-blue-500/20 text-blue-300 border border-blue-500/30';
+    else if (category === 'SECURITY') catBadgeClass = 'bg-amber-500/20 text-amber-300 border border-amber-500/30';
+    else if (category === 'USER') catBadgeClass = 'bg-purple-500/20 text-purple-300 border border-purple-500/30';
+    else if (category === 'SYSTEM') catBadgeClass = 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30';
 
     // Sanitize raw details for display
     let safeDetails = null;
@@ -2451,9 +2577,12 @@ function renderAuditLogs() {
     // Action color badge
     let actionBadgeClass = 'bg-slate-700 text-slate-200';
     if (log.action?.includes('APPROV')) actionBadgeClass = 'bg-emerald-950/80 border border-emerald-700 text-emerald-300';
-    else if (log.action?.includes('REJECT') || log.action?.includes('FAIL')) actionBadgeClass = 'bg-red-950/80 border border-red-700 text-red-300';
-    else if (log.action?.includes('SUSPEND')) actionBadgeClass = 'bg-amber-950/80 border border-amber-700 text-amber-300';
+    else if (log.action?.includes('REJECT') || log.action?.includes('FAIL') || log.action?.includes('DELET')) actionBadgeClass = 'bg-red-950/80 border border-red-700 text-red-300';
+    else if (log.action?.includes('SUSPEND') || log.action?.includes('BLOCK')) actionBadgeClass = 'bg-amber-950/80 border border-amber-700 text-amber-300';
     else if (log.action?.includes('LOGIN')) actionBadgeClass = 'bg-sky-950/80 border border-sky-700 text-sky-300';
+    else if (log.action?.includes('AI_')) actionBadgeClass = 'bg-cyan-950/80 border border-cyan-700 text-cyan-300';
+    else if (log.action?.includes('ROOM_')) actionBadgeClass = 'bg-emerald-950/80 border border-emerald-700 text-emerald-300';
+    else if (log.action?.includes('REQUEST_')) actionBadgeClass = 'bg-blue-950/80 border border-blue-700 text-blue-300';
     else if (log.action?.includes('UPDATE') || log.action?.includes('MODERAT')) actionBadgeClass = 'bg-purple-950/80 border border-purple-700 text-purple-300';
 
     return `
@@ -2466,6 +2595,9 @@ function renderAuditLogs() {
             <span class="text-xs font-mono font-bold px-2 py-0.5 rounded-md ${actionBadgeClass}">
               ${escapeHtml(log.action)}
             </span>
+            <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md ${catBadgeClass}">
+              ${escapeHtml(category)}
+            </span>
             <span class="text-[11px] px-2 py-0.5 rounded-md bg-slate-700/80 text-slate-300 font-medium">
               ${escapeHtml(entity)}
             </span>
@@ -2473,6 +2605,7 @@ function renderAuditLogs() {
             ${title ? `<span class="text-xs text-white font-semibold">"${escapeHtml(title)}"</span>` : ''}
           </div>
           <div class="text-[11px] font-mono text-slate-400 flex items-center gap-2">
+            ${log.requestId ? `<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700/80 text-slate-400 font-mono" title="Request ID: ${escapeHtml(log.requestId)}">Req: ${escapeHtml(log.requestId.substring(0, 8))}...</span>` : ''}
             <span>⏱️ ${escapeHtml(timeStr)}</span>
             ${duration ? `<span class="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-400">${duration}</span>` : ''}
           </div>
@@ -2508,7 +2641,7 @@ function renderAuditLogs() {
 
         <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 pt-1">
           <div class="flex items-center gap-3 flex-wrap">
-            <span>👤 Admin Actor: <strong class="text-slate-200 font-mono">${escapeHtml(actor)}</strong></span>
+            <span>👤 Actor: <strong class="text-slate-200 font-mono">${escapeHtml(actor)}</strong></span>
             ${log.ipAddress ? `<span>🌐 IP: <span class="font-mono text-slate-300">${escapeHtml(log.ipAddress)}</span></span>` : ''}
             ${method && path ? `<span class="font-mono text-slate-300 px-2 py-0.5 rounded bg-slate-900 border border-slate-700/80">${method} ${path}</span>` : ''}
           </div>
@@ -2698,7 +2831,11 @@ document.addEventListener('keydown', (e) => {
 });
 
 function showToast(msg, type = 'info') {
+  if (window.AppToast && typeof window.AppToast.show === 'function') {
+    return window.AppToast.show(msg, { type });
+  }
   const container = document.getElementById('toastContainer');
+  if (!container) return;
   const toast = document.createElement('div');
   
   let bg = 'bg-slate-800 border-slate-700 text-white';

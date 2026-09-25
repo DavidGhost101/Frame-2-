@@ -1,5 +1,6 @@
 const roomRequestRepository = require('../repositories/RoomRequestRepository');
 const fallbackStore = require('../../../services/fallbackStore');
+const persistentStore = require('../../../services/persistentStore');
 const mongoose = require('mongoose');
 const appEvents = require('../events/eventEmitter');
 
@@ -76,7 +77,29 @@ class RoomRequestService {
         } catch (_) {}
       }
 
-      if (total === 0 && fallbackStore && fallbackStore.fallbackRequests) {
+      const seenIds = new Set();
+      const seenSigs = new Set();
+      const combined = [];
+
+      const addReq = (r) => {
+        if (!r) return;
+        const strId = String(r._id);
+        if (persistentStore && persistentStore.isRequestDeleted(strId)) return;
+        if (r.isDeleted === true || r.status === 'deleted' || r.status === 'archived') return;
+
+        const sig = `${(r.seekerName||'').trim().toLowerCase()}|${(r.phone||'').trim().toLowerCase()}|${(r.suburb||'').trim().toLowerCase()}`;
+        if (seenIds.has(strId) || (sig && seenSigs.has(sig))) return;
+
+        seenIds.add(strId);
+        if (sig) seenSigs.add(sig);
+        combined.push(r);
+      };
+
+      for (const it of items) {
+        addReq(it);
+      }
+
+      if (fallbackStore && fallbackStore.fallbackRequests) {
         let fbItems = fallbackStore.fallbackRequests.filter(r => !r.isDeleted && r.status !== 'archived');
         if (status && status !== 'all') {
           fbItems = fbItems.filter(r => r.status === status);
@@ -92,18 +115,36 @@ class RoomRequestService {
             (r.notes && r.notes.toLowerCase().includes(kw))
           );
         }
-        return {
-          items: fbItems.slice(skip, skip + Number(limit)),
-          total: fbItems.length,
-          page: Number(page),
-          limit: Number(limit)
-        };
+        for (const fb of fbItems) {
+          addReq(fb);
+        }
       }
 
-      return { items, total, page: Number(page), limit: Number(limit) };
+      // Sort newest first by default
+      combined.sort((a, b) => {
+        const tA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const tB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return tB - tA;
+      });
+
+      const totalMatching = combined.length;
+      const paginated = combined.slice(skip, skip + Math.min(100, Number(limit)));
+      return { items: paginated, total: totalMatching, page: Number(page), limit: Number(limit) };
     } catch (err) {
       console.warn('RoomRequestService query fallback:', err.message);
-      let fbItems = (fallbackStore.fallbackRequests || []).filter(r => !r.isDeleted && r.status !== 'archived');
+      const seenIds = new Set();
+      const seenSigs = new Set();
+      const fbItems = [];
+      for (const r of (fallbackStore.fallbackRequests || [])) {
+        if (!r || r.isDeleted || r.status === 'archived') continue;
+        const strId = String(r._id);
+        if (persistentStore && persistentStore.isRequestDeleted(strId)) continue;
+        const sig = `${(r.seekerName||'').trim().toLowerCase()}|${(r.phone||'').trim().toLowerCase()}|${(r.suburb||'').trim().toLowerCase()}`;
+        if (seenIds.has(strId) || (sig && seenSigs.has(sig))) continue;
+        seenIds.add(strId);
+        if (sig) seenSigs.add(sig);
+        fbItems.push(r);
+      }
       return {
         items: fbItems,
         total: fbItems.length,
@@ -264,6 +305,10 @@ class RoomRequestService {
    */
   async deleteRoomRequest(id, adminUser = null) {
     let deleted = null;
+    if (persistentStore && typeof persistentStore.recordDeletedRequest === 'function') {
+      persistentStore.recordDeletedRequest(id);
+      persistentStore.deleteDocFromFirestore('room_requests', id);
+    }
     try {
       if (mongoose.Types.ObjectId.isValid(id)) {
         deleted = await roomRequestRepository.deleteById(id);

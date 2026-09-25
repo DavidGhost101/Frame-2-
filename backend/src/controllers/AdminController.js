@@ -1,4 +1,5 @@
 const adminService = require('../services/AdminService');
+const listingService = require('../services/ListingService');
 const ApiResponse = require('../utils/apiResponse');
 const { serializeLandlord, serializeListing } = require('../utils/securitySanitizer');
 
@@ -8,6 +9,36 @@ class AdminController {
       const stats = await adminService.getDashboardStats();
       return ApiResponse.success(res, 'Dashboard metrics retrieved', stats, 200, {
         stats
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getPendingListings(req, res, next) {
+    try {
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const limit = Math.min(200, Number(req.query.limit) || 100);
+
+      const result = await listingService.getListings({
+        status: 'pending_review',
+        sortBy: 'createdAt',
+        order: 'desc',
+        page,
+        limit
+      }, true);
+
+      let listings = result.items || [];
+      // Enforce newest-first ordering (createdAt DESC)
+      listings.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+      const safeListings = listings.map(l => serializeListing(l, true));
+      return ApiResponse.success(res, 'Pending listings retrieved successfully', safeListings, 200, {
+        listings: safeListings,
+        count: safeListings.length,
+        total: result.total || safeListings.length,
+        page,
+        limit
       });
     } catch (err) {
       next(err);

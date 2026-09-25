@@ -84,6 +84,21 @@ class AuthController {
         landlord: safeLandlord
       };
 
+      auditLogRepository.logAction({
+        userId: result.landlord ? (result.landlord._id || result.landlord.id) : null,
+        actorEmail: phone,
+        actorRole: 'LANDLORD',
+        action: 'USER_LOGIN',
+        category: 'SECURITY',
+        resource: 'Landlord',
+        resourceId: String(result.landlord ? (result.landlord._id || result.landlord.id) : phone),
+        status: 'SUCCESS',
+        result: 'SUCCESS',
+        ipAddress: req.ip,
+        requestId: req.id,
+        details: { loginMethod: 'OTP' }
+      }).catch(() => {});
+
       return ApiResponse.success(res, 'Phone verified and authenticated successfully.', safeResponse, 200, safeResponse);
     } catch (err) {
       const status = err.statusCode || 401;
@@ -272,9 +287,41 @@ class AuthController {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax'
     };
+
+    // Extract and revoke all active tokens to prevent token replay
+    const authHeader = req.headers.authorization;
+    const bearerToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+    const cookieTokens = [
+      req.cookies && req.cookies.landlordToken,
+      req.cookies && req.cookies.auth_token,
+      req.cookies && req.cookies.adminSession,
+      bearerToken
+    ].filter(t => typeof t === 'string' && t.length > 10);
+
+    const TokenUtil = require('../utils/tokenUtil');
+    cookieTokens.forEach(token => {
+      try {
+        TokenUtil.revokeToken(token);
+      } catch (_) {}
+    });
+
     res.clearCookie('landlordToken', clearOptions);
     res.clearCookie('auth_token', clearOptions);
     res.clearCookie('adminSession', clearOptions);
+
+    auditLogRepository.logAction({
+      userId: req.user ? (req.user._id || req.user.id || req.user.userId) : null,
+      actorEmail: req.user ? req.user.email : 'authenticated_user',
+      actorRole: req.user ? (req.user.role || 'USER') : 'USER',
+      action: 'USER_LOGOUT',
+      category: 'SECURITY',
+      resource: 'User',
+      status: 'SUCCESS',
+      result: 'SUCCESS',
+      ipAddress: req.ip,
+      requestId: req.id
+    }).catch(() => {});
+
     return ApiResponse.success(res, 'Logged out successfully.');
   }
 

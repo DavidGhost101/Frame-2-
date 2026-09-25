@@ -199,6 +199,14 @@ router.get('/listings/stream', requireAdmin, (req, res) => {
     });
   };
 
+  const handleAuditCreated = (payload) => {
+    sendSseEvent('audit:created', {
+      auditLog: payload,
+      event: 'audit:created',
+      timestamp: new Date().toISOString()
+    });
+  };
+
   appEvents.on('listing:created', handleListingCreated);
   appEvents.on('listing:approved', handleListingApproved);
   appEvents.on('listing:rejected', handleListingRejected);
@@ -210,6 +218,7 @@ router.get('/listings/stream', requireAdmin, (req, res) => {
   appEvents.on('request:deleted', handleRequestDeleted);
   appEvents.on('landlord:updated', handleLandlordUpdated);
   appEvents.on('user:updated', handleUserUpdated);
+  appEvents.on('audit:created', handleAuditCreated);
 
   // Clean up all event listeners and intervals when client disconnects or unmounts
   req.on('close', () => {
@@ -225,6 +234,7 @@ router.get('/listings/stream', requireAdmin, (req, res) => {
     appEvents.removeListener('request:deleted', handleRequestDeleted);
     appEvents.removeListener('landlord:updated', handleLandlordUpdated);
     appEvents.removeListener('user:updated', handleUserUpdated);
+    appEvents.removeListener('audit:created', handleAuditCreated);
   });
 });
 
@@ -278,6 +288,9 @@ router.get('/listings', async (req, res, next) => {
   }
 });
 
+// Dedicated pending listings endpoint: GET /api/admin/listings/pending (must come before /listings/:id)
+router.get('/listings/pending', adminController.getPendingListings);
+
 router.get('/listings/:id', async (req, res, next) => {
   try {
     const listing = await listingService.getListingById(req.params.id);
@@ -292,10 +305,12 @@ router.get('/listings/:id', async (req, res, next) => {
 router.patch('/listings/:id', adminController.updateListing);
 router.put('/listings/:id', adminController.updateListing);
 
-// Dedicated moderation endpoints
+// Dedicated moderation endpoints (supporting PATCH, POST, PUT)
+router.patch('/listings/:id/approve', adminController.approveListing);
 router.post('/listings/:id/approve', adminController.approveListing);
 router.put('/listings/:id/approve', adminController.approveListing);
 
+router.patch('/listings/:id/reject', adminController.rejectListing);
 router.post('/listings/:id/reject', adminController.rejectListing);
 router.put('/listings/:id/reject', adminController.rejectListing);
 
@@ -583,14 +598,18 @@ router.get('/audit-logs', async (req, res, next) => {
     const limit = Number(req.query.limit) || 50;
     const page = Number(req.query.page) || 1;
     const action = req.query.action || null;
+    const category = req.query.category || null;
+    const search = req.query.search || req.query.q || null;
     const actorEmail = req.query.actorEmail || null;
-    const entityType = req.query.entityType || null;
+    const entityType = req.query.entityType || req.query.resource || null;
     const resultStatus = req.query.result || req.query.status || null;
 
     const result = await auditLogRepository.findRecent({
       limit,
       page,
       action,
+      category,
+      search,
       actorEmail,
       entityType,
       result: resultStatus
@@ -598,6 +617,7 @@ router.get('/audit-logs', async (req, res, next) => {
 
     const logs = Array.isArray(result) ? result : (result.items || result.logs || []);
     const total = Array.isArray(result) ? result.length : (result.total !== undefined ? result.total : logs.length);
+    const totalPages = result.totalPages || Math.ceil(total / limit) || 1;
 
     return ApiResponse.success(res, 'Audit logs retrieved successfully', logs, 200, {
       logs,
@@ -606,7 +626,8 @@ router.get('/audit-logs', async (req, res, next) => {
       count: logs.length,
       total,
       page,
-      limit
+      limit,
+      totalPages
     });
   } catch (err) {
     next(err);

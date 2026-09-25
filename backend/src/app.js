@@ -11,8 +11,17 @@ const requestSanitizer = require('./middleware/requestSanitizer');
 const { apiLimiter } = require('./middleware/rateLimiters');
 const HealthController = require('./controllers/HealthController');
 
+const crypto = require('crypto');
+
 const app = express();
 app.set('trust proxy', 1);
+
+// Request ID Tracker & Header Propagation
+app.use((req, res, next) => {
+  req.id = req.headers['x-request-id'] || `req_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+  res.setHeader('X-Request-Id', req.id);
+  next();
+});
 
 // Security Headers
 app.use(
@@ -23,6 +32,8 @@ app.use(
   })
 );
 
+const { csrfProtection, isTrustedOrigin } = require('./security/csrfProtection');
+
 // Security Headers: content-type-options, referrer-policy, permissions-policy
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -31,16 +42,30 @@ app.use((req, res, next) => {
   next();
 });
 
-// CORS: allow all incoming origins, preview domains, iframe contexts, and local origins
+// CORS: Strictly validate origins for credentialed access
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow all origins (reflects incoming origin header to support credentials)
-      callback(null, true);
+      if (isTrustedOrigin(origin)) {
+        return callback(null, true);
+      }
+      // Untrusted origins: reject credentialed cross-origin requests
+      return callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'X-Requested-With', 'Accept', 'Origin']
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-admin-key',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+      'X-CSRF-Token',
+      'X-Request-Id',
+      'Idempotency-Key',
+      'X-Idempotency-Key'
+    ]
   })
 );
 app.options('*', cors());
@@ -49,6 +74,9 @@ app.options('*', cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
+
+// CSRF Defense Engine: Protect state-changing requests utilizing browser cookies
+app.use(csrfProtection);
 
 // Input sanitizer & NoSQL defense
 app.use(requestSanitizer);

@@ -2,6 +2,7 @@ const roomRequestService = require('../services/RoomRequestService');
 const { RoomRequestValidator } = require('../validators/roomRequestValidator');
 const ApiResponse = require('../utils/apiResponse');
 const { toWhatsAppNumber, buildWhatsAppLinks } = require('../utils/phoneUtils');
+const auditLogRepository = require('../repositories/AuditLogRepository');
 
 class RoomRequestController {
   async getRoomRequests(req, res, next) {
@@ -29,6 +30,25 @@ class RoomRequestController {
       }
 
       const request = await roomRequestService.createRoomRequest(req.body);
+
+      auditLogRepository.logAction({
+        userId: req.user ? (req.user._id || req.user.userId) : null,
+        actorEmail: req.user ? req.user.email : (req.body.phone || 'room_seeker'),
+        actorRole: req.user ? (req.user.role || 'USER') : 'USER',
+        action: 'ROOM_REQUEST_CREATED',
+        category: 'REQUEST',
+        resource: 'RoomRequest',
+        resourceId: String(request._id),
+        status: 'SUCCESS',
+        result: 'SUCCESS',
+        ipAddress: req.ip,
+        requestId: req.id,
+        details: {
+          suburbs: request.preferredSuburbs || request.suburb,
+          budget: request.budgetMax || request.maxBudget
+        }
+      }).catch(() => {});
+
       return ApiResponse.success(res, 'Room request posted successfully.', request, 201, {
         request
       });
@@ -41,6 +61,22 @@ class RoomRequestController {
     try {
       const { status } = req.body;
       const updated = await roomRequestService.updateStatus(req.params.id, status);
+
+      auditLogRepository.logAction({
+        userId: req.user ? (req.user._id || req.user.userId) : null,
+        actorEmail: req.user ? req.user.email : 'admin_moderator',
+        actorRole: req.user ? (req.user.role || 'ADMIN') : 'ADMIN',
+        action: 'ROOM_REQUEST_UPDATED',
+        category: 'REQUEST',
+        resource: 'RoomRequest',
+        resourceId: String(req.params.id),
+        status: 'SUCCESS',
+        result: 'SUCCESS',
+        newStatus: status,
+        ipAddress: req.ip,
+        requestId: req.id
+      }).catch(() => {});
+
       return ApiResponse.success(res, 'Room request status updated.', updated, 200, {
         request: updated
       });
@@ -52,6 +88,21 @@ class RoomRequestController {
   async deleteRoomRequest(req, res, next) {
     try {
       const deleted = await roomRequestService.deleteRoomRequest(req.params.id, req.user);
+
+      auditLogRepository.logAction({
+        userId: req.user ? (req.user._id || req.user.userId) : null,
+        actorEmail: req.user ? req.user.email : 'user',
+        actorRole: req.user ? (req.user.role || 'ADMIN') : 'ADMIN',
+        action: 'ROOM_REQUEST_DELETED',
+        category: 'REQUEST',
+        resource: 'RoomRequest',
+        resourceId: String(req.params.id),
+        status: 'SUCCESS',
+        result: 'SUCCESS',
+        ipAddress: req.ip,
+        requestId: req.id
+      }).catch(() => {});
+
       return ApiResponse.success(res, 'Room request deleted successfully.', deleted, 200, {
         request: deleted
       });

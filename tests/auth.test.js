@@ -36,6 +36,10 @@ describe('OTP Authentication & Listing Creation Flow', () => {
 
   beforeAll(() => {
     agent = request.agent(app); // keeps the auth_token cookie between requests
+    const fallbackStore = require('../services/fallbackStore');
+    if (fallbackStore && fallbackStore.fallbackListings) {
+      fallbackStore.fallbackListings = fallbackStore.fallbackListings.filter(l => l.title !== 'Neat backroom');
+    }
   });
 
   test('1. Should request OTP successfully', async () => {

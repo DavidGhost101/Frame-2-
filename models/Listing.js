@@ -26,10 +26,14 @@ const listingSchema = new mongoose.Schema({
   flagged: { type: Boolean, default: false, index: true },
   flagReasons: { type: [String], default: [] },
   reportCount: { type: Number, default: 0 },
+  isDeleted: { type: Boolean, default: false, index: true },
 
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now, index: true }
 });
 
 listingSchema.index({ status: 1, suburb: 1, monthlyRent: 1 });
+listingSchema.index({ createdAt: -1 });
+listingSchema.index({ status: 1, createdAt: -1 });
+listingSchema.index({ isDeleted: 1, status: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Listing', listingSchema);

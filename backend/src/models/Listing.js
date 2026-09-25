@@ -52,6 +52,10 @@ const listingSchema = new mongoose.Schema(
       type: String,
       default: ''
     },
+    images: {
+      type: [String],
+      default: []
+    },
     status: {
       type: String,
       enum: [
@@ -144,8 +148,10 @@ const listingSchema = new mongoose.Schema(
   }
 );
 
+listingSchema.index({ createdAt: -1 });
 listingSchema.index({ status: 1, suburb: 1, monthlyRent: 1 });
 listingSchema.index({ status: 1, createdAt: -1 });
+listingSchema.index({ isDeleted: 1, createdAt: -1 });
 listingSchema.index({ isDeleted: 1, status: 1, createdAt: -1 });
 listingSchema.index({ publicationStatus: 1, createdAt: -1 });
 listingSchema.index({ title: 'text', suburb: 'text', address: 'text' });

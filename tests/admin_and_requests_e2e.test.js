@@ -81,6 +81,15 @@ describe('E2E Verification: Admin Panel, Moderation, & Room Requests', () => {
     const landlordToken = verifyRes.body.token || (verifyRes.body.data && verifyRes.body.data.token) || verifyRes.body.accessToken;
     testLandlordId = String(verifyRes.body.landlord?._id || verifyRes.body.data?.landlord?._id || verifyRes.body.data?.user?._id || '');
 
+    if (fallbackStore && fallbackStore.fallbackListings) {
+      for (let i = fallbackStore.fallbackListings.length - 1; i >= 0; i--) {
+        const l = fallbackStore.fallbackListings[i];
+        if (l.phone === testPhone || (l.landlordId && l.landlordId.phone === testPhone)) {
+          fallbackStore.fallbackListings.splice(i, 1);
+        }
+      }
+    }
+
     // Post room listing with NO subscription
     const postRes = await request(app)
       .post('/api/listings/create')
@@ -179,5 +188,135 @@ describe('E2E Verification: Admin Panel, Moderation, & Room Requests', () => {
       .send({ status: 'active' });
 
     expect(restoreRes.statusCode).toEqual(200);
+  });
+
+  let pendingListingId = '';
+
+  test('7. Workflow E2E: Room listing submission saves with status PENDING_REVIEW and is hidden from public', async () => {
+    const postRes = await request(app)
+      .post('/api/listings/create')
+      .send({
+        fullName: 'Kagiso Mokoena',
+        phone: '0831112233',
+        title: 'Modern Sunny En-suite Room in Pimville',
+        suburb: 'Pimville',
+        address: '108 Zone 2, Pimville',
+        monthlyRent: 2300,
+        propertyType: 'Ensuite',
+        amenities: ['Prepaid Electricity', 'Secure Yard', 'Hot Shower'],
+        image: '/images/township_ensuite.jpg'
+      });
+
+    expect([200, 201]).toContain(postRes.statusCode);
+    expect(postRes.body.success).toBe(true);
+
+    const listing = postRes.body.listing || postRes.body.data;
+    expect(listing).toBeDefined();
+    pendingListingId = String(listing._id || listing.id);
+
+    // Initial status MUST be pending_review / PENDING
+    expect(listing.status).toEqual('pending_review');
+    expect(listing.publicationStatus).toEqual('PENDING');
+
+    // Verify it is NOT returned in public listings search
+    const publicRes = await request(app).get('/api/listings');
+    expect(publicRes.statusCode).toEqual(200);
+    const publicListings = publicRes.body.data?.items || publicRes.body.listings || [];
+    const foundPublic = publicListings.find(l => String(l._id) === pendingListingId);
+    expect(foundPublic).toBeUndefined();
+  });
+
+  test('8. Workflow E2E: Newly submitted listing appears immediately in Admin Pending Listings', async () => {
+    // 8a: Verify via GET /api/admin/listings/pending
+    const pendingRes = await request(app)
+      .get('/api/admin/listings/pending')
+      .set('x-admin-key', 'test_admin_key_2026');
+
+    expect(pendingRes.statusCode).toEqual(200);
+    expect(pendingRes.body.success).toBe(true);
+    const pendingItems = pendingRes.body.listings || (Array.isArray(pendingRes.body.data) ? pendingRes.body.data : pendingRes.body.data?.listings) || [];
+    const targetPending = pendingItems.find(l => String(l._id || l.id) === pendingListingId);
+    expect(targetPending).toBeDefined();
+    expect(targetPending.title).toContain('Modern Sunny En-suite');
+
+    // 8b: Verify via GET /api/admin/listings?status=pending_review
+    const statusQueryRes = await request(app)
+      .get('/api/admin/listings?status=pending_review')
+      .set('x-admin-key', 'test_admin_key_2026');
+
+    expect(statusQueryRes.statusCode).toEqual(200);
+    const filteredItems = statusQueryRes.body.listings || (Array.isArray(statusQueryRes.body.data) ? statusQueryRes.body.data : statusQueryRes.body.data?.listings) || [];
+    const foundInQuery = filteredItems.find(l => String(l._id) === pendingListingId);
+    expect(foundInQuery).toBeDefined();
+  });
+
+  test('9. Workflow E2E: Admin approves listing via PATCH, updates status to active, and blocks duplicate moderation', async () => {
+    // Approve listing
+    const approveRes = await request(app)
+      .patch(`/api/admin/listings/${pendingListingId}/approve`)
+      .set('x-admin-key', 'test_admin_key_2026');
+
+    expect(approveRes.statusCode).toEqual(200);
+    expect(approveRes.body.success).toBe(true);
+    const approvedListing = approveRes.body.data?.listing || approveRes.body.data;
+    expect(approvedListing.status).toEqual('active');
+    expect(approvedListing.publicationStatus).toEqual('PUBLISHED');
+
+    // Conflict check: Attempting to re-approve already active listing must return 409 Conflict
+    const duplicateApproveRes = await request(app)
+      .patch(`/api/admin/listings/${pendingListingId}/approve`)
+      .set('x-admin-key', 'test_admin_key_2026');
+
+    expect(duplicateApproveRes.statusCode).toEqual(409);
+    expect(duplicateApproveRes.body.message).toContain('already active');
+
+    // Verify it is now visible in the public listings portal
+    const publicRes = await request(app).get('/api/listings');
+    expect(publicRes.statusCode).toEqual(200);
+    const publicListings = publicRes.body.data?.items || publicRes.body.listings || [];
+    const foundPublic = publicListings.find(l => String(l._id) === pendingListingId);
+    expect(foundPublic).toBeDefined();
+    expect(foundPublic.title).toContain('Modern Sunny En-suite');
+  });
+
+  test('10. Workflow E2E: Admin rejects listing with reason via PATCH and enforces state conflict check', async () => {
+    // Create second room listing for rejection test
+    const postRes = await request(app)
+      .post('/api/listings/create')
+      .send({
+        fullName: 'Bongani Khumalo',
+        phone: '0842223344',
+        title: 'Cottage with Incomplete Wiring in Meadowlands',
+        suburb: 'Meadowlands',
+        address: '55 Forbes Road',
+        monthlyRent: 1600,
+        propertyType: 'Backroom',
+        image: '/images/township_backroom.jpg'
+      });
+
+    expect([200, 201]).toContain(postRes.statusCode);
+    const secondListingId = String(postRes.body.listing?._id || postRes.body.data?._id);
+
+    // Reject via PATCH /api/admin/listings/:id/reject with reason
+    const rejectRes = await request(app)
+      .patch(`/api/admin/listings/${secondListingId}/reject`)
+      .set('x-admin-key', 'test_admin_key_2026')
+      .send({ reason: 'Safety concerns: unverified wiring and unclear entrance photos' });
+
+    expect(rejectRes.statusCode).toEqual(200);
+    expect(rejectRes.body.success).toBe(true);
+    const rejected = rejectRes.body.data?.listing || rejectRes.body.data;
+    expect(rejected.status).toEqual('rejected');
+    expect(rejected.publicationStatus).toEqual('REJECTED');
+    expect(rejected.rejectionReason).toContain('Safety concerns');
+
+    // Duplicate rejection returns 409 Conflict
+    const dupRejectRes = await request(app)
+      .patch(`/api/admin/listings/${secondListingId}/reject`)
+      .set('x-admin-key', 'test_admin_key_2026')
+      .send({ reason: 'Duplicate reject attempt' });
+
+    expect(dupRejectRes.statusCode).toEqual(409);
+    expect(dupRejectRes.body.message).toContain('already rejected');
   });
 });

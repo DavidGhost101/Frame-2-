@@ -91,6 +91,17 @@ const auditLogSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: {}
     },
+    category: {
+      type: String,
+      enum: ['AI', 'ROOM', 'REQUEST', 'USER', 'SECURITY', 'SYSTEM', 'OTHER'],
+      default: 'SYSTEM',
+      index: true
+    },
+    requestId: {
+      type: String,
+      default: null,
+      index: true
+    },
     status: {
       type: String,
       enum: ['SUCCESS', 'FAILURE', 'WARNING', 'FAILED'],

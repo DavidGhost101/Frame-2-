@@ -4,6 +4,7 @@ const roomRequestRepository = require('../repositories/RoomRequestRepository');
 const userRepository = require('../repositories/UserRepository');
 const auditLogRepository = require('../repositories/AuditLogRepository');
 const fallbackStore = require('../../../services/fallbackStore');
+const persistentStore = require('../../../services/persistentStore');
 const Landlord = require('../models/Landlord');
 const Listing = require('../models/Listing');
 const appEvents = require('../events/eventEmitter');
@@ -181,6 +182,49 @@ class AdminService {
       throw new Error(`Landlord with ID ${landlordId} not found.`);
     }
 
+    // If blocking landlord, automatically suspend their active and pending listings
+    if (isBlockedBool) {
+      try {
+        const suspendUpdate = {
+          status: 'suspended',
+          publicationStatus: 'SUSPENDED',
+          isApproved: false,
+          suspendedBy: (adminUser && (adminUser.email || adminUser.username)) || 'admin@rentaroom.co.za',
+          suspendedAt: new Date(),
+          rejectionReason: 'Landlord blocked by administrator'
+        };
+
+        if (mongoose.Types.ObjectId.isValid(landlordId)) {
+          await Listing.updateMany(
+            { landlordId: landlordId, status: { $in: ['active', 'approved', 'published', 'pending_review', 'pending'] } },
+            { $set: suspendUpdate }
+          );
+        }
+
+        if (fallbackStore && fallbackStore.fallbackListings) {
+          fallbackStore.fallbackListings.forEach(l => {
+            const matchId = l.landlordId && (String(l.landlordId._id || l.landlordId) === String(landlordId));
+            const matchPhone = landlord.phone && (l.phone === landlord.phone || (l.landlordId && l.landlordId.phone === landlord.phone));
+            if (matchId || matchPhone) {
+              const lSt = (l.status || '').toLowerCase();
+              if (['active', 'approved', 'published', 'pending_review', 'pending'].includes(lSt)) {
+                l.status = 'suspended';
+                l.publicationStatus = 'SUSPENDED';
+                l.isApproved = false;
+                l.suspendedAt = new Date();
+                l.rejectionReason = 'Landlord blocked by administrator';
+                if (persistentStore && typeof persistentStore.syncDocToFirestore === 'function') {
+                  persistentStore.syncDocToFirestore('listings', l._id, l);
+                }
+              }
+            }
+          });
+        }
+      } catch (suspErr) {
+        console.warn('Notice while suspending blocked landlord listings:', suspErr.message);
+      }
+    }
+
     if (adminUser) {
       await auditLogRepository.logAction({
         userId: adminUser.userId || adminUser._id,
@@ -321,7 +365,45 @@ class AdminService {
       previousListing = fallbackStore.fallbackListings.find(l => String(l._id) === String(listingId));
     }
 
-    const prevStatus = previousListing ? (previousListing.status || 'pending_review') : 'pending_review';
+    if (!previousListing) {
+      const err = new Error('Listing no longer exists.');
+      err.statusCode = 404;
+      err.status = 404;
+      throw err;
+    }
+
+    const prevStatus = previousListing.status || 'pending_review';
+    const prevPubStatus = previousListing.publicationStatus || 'PENDING';
+
+    // Double-action / race-condition / conflict check:
+    if (action === 'approve') {
+      if (prevStatus === 'active' || prevPubStatus === 'PUBLISHED') {
+        const err = new Error('This listing has already been processed and is already active.');
+        err.statusCode = 409;
+        err.status = 409;
+        throw err;
+      }
+      if (prevStatus === 'rejected' && !options.allowFromRejected) {
+        const err = new Error('This listing has already been processed and was rejected.');
+        err.statusCode = 409;
+        err.status = 409;
+        throw err;
+      }
+    } else if (action === 'reject') {
+      if (prevStatus === 'rejected' || prevPubStatus === 'REJECTED') {
+        const err = new Error('This listing has already been processed and is already rejected.');
+        err.statusCode = 409;
+        err.status = 409;
+        throw err;
+      }
+      if (prevStatus === 'active' && !options.allowFromActive) {
+        const err = new Error('This listing has already been processed and is active.');
+        err.statusCode = 409;
+        err.status = 409;
+        throw err;
+      }
+    }
+
     let update = {};
     let auditAction = `MODERATE_LISTING_${action.toUpperCase()}`;
 
@@ -390,6 +472,10 @@ class AdminService {
       try {
         await Listing.deleteOne({ _id: listingId });
       } catch (_) {}
+      if (persistentStore && typeof persistentStore.recordDeletedListing === 'function') {
+        persistentStore.recordDeletedListing(listingId);
+        persistentStore.deleteDocFromFirestore('listings', listingId);
+      }
       if (fallbackStore && fallbackStore.fallbackListings) {
         fallbackStore.fallbackListings = fallbackStore.fallbackListings.filter(l => String(l._id) !== String(listingId));
       }

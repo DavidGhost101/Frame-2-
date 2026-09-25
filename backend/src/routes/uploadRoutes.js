@@ -63,7 +63,12 @@ router.post('/photo', uploadLimiter, (req, res, next) => {
   });
 });
 
-// Alias endpoint
+// Alias endpoints
+router.post('/', (req, res, next) => {
+  req.url = '/photo';
+  router.handle(req, res, next);
+});
+
 router.post('/listing-photo', (req, res, next) => {
   req.url = '/photo';
   router.handle(req, res, next);

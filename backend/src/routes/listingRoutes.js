@@ -3,11 +3,13 @@ const router = express.Router();
 const listingController = require('../controllers/ListingController');
 const listingService = require('../services/ListingService');
 const { authenticate, optionalAuth, checkNotBlocked, requireAdmin } = require('../middleware/authMiddleware');
-const { listingCreateLimiter } = require('../middleware/rateLimiters');
+const { listingCreateLimiter, searchLimiter, contactLimiter } = require('../middleware/rateLimiters');
+const { idempotencyProtection } = require('../middleware/idempotencyMiddleware');
 const ApiResponse = require('../utils/apiResponse');
 const { serializeListing } = require('../utils/securitySanitizer');
 
-router.get('/', listingController.getListings);
+router.get('/', searchLimiter, listingController.getListings);
+router.get('/search', searchLimiter, listingController.getListings);
 
 // Administrative recent messages feed (strictly protected)
 router.get('/messages/recent', requireAdmin, listingController.getAllRecentMessages);
@@ -16,7 +18,7 @@ router.get('/messages/recent', requireAdmin, listingController.getAllRecentMessa
 router.get('/mine', authenticate, async (req, res, next) => {
   try {
     const landlordId = req.user.landlordId || req.user.userId;
-    const result = await listingService.getListings({ status: 'all', limit: 50 });
+    const result = await listingService.getListings({ status: 'all', limit: 50 }, true);
     const myListings = (result.items || [])
       .filter(l => l.landlordId && (l.landlordId._id || l.landlordId).toString() === landlordId.toString())
       .map(l => serializeListing(l, true));
@@ -32,14 +34,14 @@ router.get('/mine', authenticate, async (req, res, next) => {
 router.get('/:id', listingController.getListingById);
 
 // Create listing with blocked landlord protection (supports direct posting as well as authenticated landlords)
-router.post('/create', optionalAuth, checkNotBlocked, listingCreateLimiter, listingController.createListing);
-router.post('/', optionalAuth, checkNotBlocked, listingCreateLimiter, listingController.createListing);
+router.post('/create', optionalAuth, checkNotBlocked, listingCreateLimiter, idempotencyProtection(), listingController.createListing);
+router.post('/', optionalAuth, checkNotBlocked, listingCreateLimiter, idempotencyProtection(), listingController.createListing);
 
 // Edit listing with blocked landlord protection
 router.put('/:id', authenticate, checkNotBlocked, listingController.updateListing);
 router.patch('/:id', authenticate, checkNotBlocked, listingController.updateListing);
 router.delete('/:id', authenticate, listingController.deleteListing);
-router.post('/:id/contact', listingController.trackContact);
+router.post('/:id/contact', contactLimiter, listingController.trackContact);
 router.post('/:id/report', listingController.reportListing);
 
 // In-Platform Tenant <-> Landlord Chat Messaging Endpoints

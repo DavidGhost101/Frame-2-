@@ -33,15 +33,85 @@ class ApiResponse {
    * @param {String} code - Error code identifier
    */
   static error(res, message = 'An unexpected error occurred', statusCode = 500, errors = [], code = null) {
+    const requestId =
+      (res && res.req && (res.req.id || (res.req.headers && res.req.headers['x-request-id']))) ||
+      `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    if (res && typeof res.setHeader === 'function') {
+      try {
+        res.setHeader('X-Request-Id', requestId);
+      } catch (_) {}
+    }
+
+    // Map status code to standard machine-readable error codes if not provided
+    let errorCode = code;
+    if (!errorCode) {
+      switch (statusCode) {
+        case 400:
+        case 422:
+          errorCode = 'VALIDATION_ERROR';
+          break;
+        case 401:
+          errorCode = 'AUTHENTICATION_REQUIRED';
+          break;
+        case 403:
+          errorCode = 'AUTHORIZATION_REQUIRED';
+          break;
+        case 404:
+          errorCode = 'RESOURCE_NOT_FOUND';
+          break;
+        case 408:
+          errorCode = 'REQUEST_TIMEOUT';
+          break;
+        case 409:
+          errorCode = 'CONFLICT';
+          break;
+        case 429:
+          errorCode = 'RATE_LIMITED';
+          break;
+        case 502:
+        case 503:
+        case 504:
+          errorCode = 'SERVER_UNAVAILABLE';
+          break;
+        default:
+          errorCode = statusCode >= 500 ? 'SERVER_ERROR' : 'ERROR';
+      }
+    }
+
+    // Scrub internal stack / database messages from being exposed to clients
+    let safeMessage = message;
+    if (statusCode >= 500) {
+      safeMessage = 'Something went wrong on our side. Please try again later.';
+    } else if (typeof safeMessage === 'string') {
+      if (
+        safeMessage.includes('Mongo') ||
+        safeMessage.includes('E11000') ||
+        safeMessage.includes('Cast to ObjectId') ||
+        safeMessage.includes('node_modules') ||
+        safeMessage.includes('stack') ||
+        safeMessage.includes('sql') ||
+        safeMessage.includes('syntax')
+      ) {
+        safeMessage = 'A data validation or system error occurred. Please verify your data and try again.';
+      }
+    }
+
     const rawPayload = {
       success: false,
-      message,
-      errors: Array.isArray(errors) ? errors : [errors],
-      error: message // Backwards compatibility for legacy frontend checking res.error
+      message: safeMessage,
+      error: safeMessage,
+      code: errorCode,
+      errorDetails: {
+        code: errorCode,
+        message: safeMessage,
+        requestId,
+        ...(Array.isArray(errors) && errors.length > 0 ? { details: errors } : {})
+      },
+      errors: Array.isArray(errors) ? errors : [errors].filter(Boolean),
+      requestId
     };
-    if (code) {
-      rawPayload.code = code;
-    }
+
     const sanitizedPayload = sanitizeData(rawPayload);
     return res.status(statusCode).json(sanitizedPayload);
   }
