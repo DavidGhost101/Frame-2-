@@ -273,7 +273,12 @@ function serializeListing(listing, isPrivileged = false) {
   if (raw.landlordFullName || raw.landlordName) {
     safe.landlordFullName = raw.landlordFullName || raw.landlordName;
   }
-  if (raw.phone && (raw.showPhonePublicly !== false || isPrivileged)) {
+  // Only publish the landlord's number when they explicitly opted in, either
+  // on the listing itself or on their landlord profile. A missing flag means
+  // no consent, so the number stays private (tenants use /contact instead).
+  const landlordRef = raw.landlordId && typeof raw.landlordId === 'object' ? raw.landlordId : null;
+  const phoneConsented = raw.showPhonePublicly === true || Boolean(landlordRef && landlordRef.showPhonePublicly === true);
+  if (raw.phone && (isPrivileged || phoneConsented)) {
     safe.phone = raw.phone;
   }
 

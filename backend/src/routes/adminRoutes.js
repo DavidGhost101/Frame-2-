@@ -655,8 +655,13 @@ router.post('/messages/reply', async (req, res, next) => {
     text = (text || replyText || msgBody || '').trim();
 
     if ((!listingId || !tenantId) && messageId) {
-      const Message = require('../models/Message');
-      const orig = await Message.findById(messageId);
+      // Sample and offline-store messages use ids like "msg_002", which
+      // Mongoose rejects, so look those up in the fallback store instead.
+      let orig = (fallbackStore.fallbackMessages || []).find(m => String(m._id) === String(messageId)) || null;
+      if (!orig && mongoose.isValidObjectId(messageId) && mongoose.connection.readyState === 1) {
+        const Message = require('../models/Message');
+        orig = await Message.findById(messageId);
+      }
       if (orig) {
         listingId = listingId || (orig.listingId ? (orig.listingId._id || orig.listingId) : null);
         tenantId = tenantId || orig.tenantId;
