@@ -16,6 +16,7 @@ router.use('/auth', authRoutes);
 router.use('/listings', listingRoutes);
 router.use('/room-requests', roomRequestRoutes);
 router.use('/requests', roomRequestRoutes);
+router.use('/admin/owner', require('./ownerRoutes'));
 router.use('/admin', adminRoutes);
 router.use('/users', userRoutes);
 router.use('/reports', reportRoutes);

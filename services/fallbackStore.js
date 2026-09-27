@@ -694,7 +694,7 @@ function updateUser(id, updateData) {
 function findAdminUser(identifier = '') {
   const norm = String(identifier || '').trim().toLowerCase();
   const admins = fallbackUsers.filter(u => u.role === 'SUPER_ADMIN' || u.role === 'ADMIN');
-  if (admins.length === 0) return fallbackUsers[0] || null;
+  if (admins.length === 0) return null;
 
   if (!norm || norm === 'admin' || norm === 'superadmin') {
     return admins[0];
@@ -764,12 +764,11 @@ function verifyAdminPassword(candidatePassword, identifier = '') {
   // 2. Verification against environment secrets
   const envPassword = process.env.ADMIN_PASSWORD && !process.env.ADMIN_PASSWORD.includes('replace_with_') ? process.env.ADMIN_PASSWORD.trim() : null;
   const envAdminKey = process.env.ADMIN_KEY && !process.env.ADMIN_KEY.includes('replace_with_') ? process.env.ADMIN_KEY.trim() : null;
-  const envSmtpPass = process.env.SMTP_PASS && !process.env.SMTP_PASS.includes('replace_with_') && process.env.SMTP_PASS.trim().length >= 6 ? process.env.SMTP_PASS.trim() : null;
-
+  // Only the documented admin secrets are accepted. (The SMTP mail password
+  // used to be accepted here too, which made it an undocumented admin login.)
   const validSecrets = [
     envPassword,
-    envAdminKey,
-    envSmtpPass
+    envAdminKey
   ].filter(Boolean);
 
   if (validSecrets.includes(candidate)) {

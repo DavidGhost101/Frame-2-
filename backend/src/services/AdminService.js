@@ -8,8 +8,15 @@ const persistentStore = require('../../../services/persistentStore');
 const Landlord = require('../models/Landlord');
 const Listing = require('../models/Listing');
 const appEvents = require('../events/eventEmitter');
+const ownerService = require('./OwnerService');
 
 class AdminService {
+  // Owner protection for landlord records linked to the owner account.
+  async assertLandlordNotOwner(landlordId, attemptedAction, adminUser) {
+    const record = (fallbackStore.fallbackLandlords || []).find(l => String(l._id) === String(landlordId));
+    await ownerService.assertNotOwner(record, attemptedAction, adminUser);
+  }
+
   /**
    * Get comprehensive dashboard metrics
    */
@@ -104,6 +111,7 @@ class AdminService {
    * Toggle landlord paid status (retained for backward compatibility)
    */
   async setLandlordPaid(landlordId, isPaidSubscriber, adminUser = null) {
+    await this.assertLandlordNotOwner(landlordId, 'SET_LANDLORD_PAID', adminUser);
     let landlord = null;
     try {
       if (mongoose.Types.ObjectId.isValid(landlordId)) {
@@ -121,6 +129,7 @@ class AdminService {
    * Toggle landlord block status
    */
   async setLandlordBlocked(landlordId, isBlocked, adminUser = null) {
+    await this.assertLandlordNotOwner(landlordId, 'SET_LANDLORD_BLOCKED', adminUser);
     const isBlockedBool = Boolean(isBlocked);
     let landlord = null;
 
@@ -260,6 +269,7 @@ class AdminService {
    * Update landlord details (handles MongoDB and in-memory store)
    */
   async updateLandlord(landlordId, updateData = {}, adminUser = null) {
+    await this.assertLandlordNotOwner(landlordId, 'UPDATE_LANDLORD', adminUser);
     let landlord = null;
 
     if (mongoose.Types.ObjectId.isValid(landlordId)) {
@@ -311,6 +321,7 @@ class AdminService {
    * Deactivate/delete landlord account
    */
   async deleteLandlord(landlordId, adminUser = null) {
+    await this.assertLandlordNotOwner(landlordId, 'DELETE_LANDLORD', adminUser);
     let landlord = null;
 
     if (mongoose.Types.ObjectId.isValid(landlordId)) {

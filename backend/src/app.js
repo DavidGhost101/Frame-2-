@@ -111,7 +111,19 @@ app.get('/api/config', (req, res) => {
     /^[0-9a-zA-Z_-]{10,}$/.test(rawKey) &&
     (rawKey.startsWith('0x') || rawKey.startsWith('1x') || rawKey.startsWith('2x') || rawKey.startsWith('3x'));
 
+  // Firebase web config is public by design (it identifies the project; it
+  // grants nothing). Used by the owner sign-in form on the admin page.
+  let firebase = null;
+  try {
+    const cfg = JSON.parse(require('fs').readFileSync(path.join(process.cwd(), 'firebase-applet-config.json'), 'utf8'));
+    if (cfg.apiKey && cfg.projectId) {
+      // Sent as webApiKey: the response sanitizer strips any field named apiKey.
+      firebase = { webApiKey: cfg.apiKey, authDomain: cfg.authDomain || `${cfg.projectId}.firebaseapp.com`, projectId: cfg.projectId };
+    }
+  } catch (_) {}
+
   res.json({
+    firebase,
     turnstileSiteKey: isValidTurnstileKey ? rawKey : null,
     devMode: config.env === 'development' || config.sms.driver === 'local'
   });

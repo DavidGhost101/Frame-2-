@@ -1,4 +1,5 @@
 const userRepository = require('../repositories/UserRepository');
+const ownerService = require('./OwnerService');
 const auditLogRepository = require('../repositories/AuditLogRepository');
 const fallbackStore = require('../../../services/fallbackStore');
 const appEvents = require('../events/eventEmitter');
@@ -65,7 +66,17 @@ class UserService {
     throw new Error('User not found.');
   }
 
+  // Owner protection: rejects any change to the owner account and any attempt
+  // to hand out the owner role (403 + audit entry via OwnerService).
+  async assertOwnerProtected(id, attemptedAction, adminUser) {
+    let target = null;
+    try { target = await this.getUserById(id); } catch (_) {}
+    await ownerService.assertNotOwner(target, attemptedAction, adminUser);
+  }
+
   async updateUserRole(id, role, adminUser = null) {
+    await ownerService.assertRoleAssignable(role, id, adminUser);
+    await this.assertOwnerProtected(id, 'CHANGE_ROLE', adminUser);
     let user = null;
     try {
       user = await userRepository.updateById(id, { role });
@@ -100,6 +111,7 @@ class UserService {
   }
 
   async updateUserStatus(id, status, adminUser = null) {
+    await this.assertOwnerProtected(id, `SET_STATUS_${String(status || '').toUpperCase()}`, adminUser);
     let user = null;
     try {
       user = await userRepository.updateById(id, { status });

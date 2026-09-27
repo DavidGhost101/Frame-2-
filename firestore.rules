@@ -1,6 +1,20 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // The protected application owner: a Firebase Authentication account that
+    // carries the SUPER_ADMIN_OWNER custom claim. Claims can only be set with
+    // the Admin SDK (scripts/provisionOwner.js), never from a client.
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.role == 'SUPER_ADMIN_OWNER'
+        && request.auth.token.email == '12rakosadavid@gmail.com';
+    }
+
+    // Client writes may never carry role/owner fields.
+    function noPrivilegeFields() {
+      return !request.resource.data.keys().hasAny(['role', 'isOwner', 'owner', 'permissions', 'password', 'passwordHash']);
+    }
     // Listings collection: Soweto rooms and backrooms
     match /listings/{listingId} {
       allow read: if true;
@@ -23,8 +37,21 @@ service cloud.firestore {
     match /landlords/{landlordId} {
       allow read: if true;
       allow create, update: if request.resource.data.fullName is string
-                            && request.resource.data.phone is string;
+                            && request.resource.data.phone is string
+                            && noPrivilegeFields();
       allow delete: if false;
+    }
+
+    // Accounts, roles and credentials are never readable or writable from
+    // clients. Passwords live only in Firebase Authentication.
+    match /users/{userId} {
+      allow read, write: if false;
+    }
+
+    // Security audit trail: readable by the owner only, written by the server.
+    match /audit_logs/{logId} {
+      allow read: if isOwner();
+      allow write: if false;
     }
 
     // Deny all other collections by default

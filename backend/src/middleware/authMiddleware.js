@@ -7,6 +7,15 @@ const Landlord = require('../models/Landlord');
 const User = require('../models/User');
 const fallbackStore = require('../../../services/fallbackStore');
 const PhoneUtil = require('../utils/phoneUtils');
+const ownerService = require('../services/OwnerService');
+
+// A session claiming the owner role is honoured only when it came from the
+// Firebase owner login; anything else carrying that role is rejected.
+function isAdminSession(decoded) {
+  if (!decoded) return false;
+  if (decoded.role === ROLES.SUPER_ADMIN_OWNER) return ownerService.isOwnerSession(decoded);
+  return decoded.admin === true || decoded.role === ROLES.ADMIN || decoded.role === ROLES.SUPER_ADMIN;
+}
 
 // Authenticate JWT from Header or Cookie
 function authenticate(req, res, next) {
@@ -85,7 +94,10 @@ function requireRole(...allowedRoles) {
       return ApiResponse.error(res, 'Authentication required.', 401);
     }
     const role = req.user.role || (req.user.admin ? ROLES.ADMIN : ROLES.USER);
-    if (role === ROLES.SUPER_ADMIN || allowedRoles.includes(role)) {
+    if (role === ROLES.SUPER_ADMIN_OWNER && !ownerService.isOwnerSession(req.user)) {
+      return ApiResponse.error(res, 'You do not have permission to access this resource.', 403);
+    }
+    if (role === ROLES.SUPER_ADMIN || role === ROLES.SUPER_ADMIN_OWNER || allowedRoles.includes(role)) {
       return next();
     }
     return ApiResponse.error(res, 'You do not have permission to access this resource.', 403);
@@ -99,6 +111,9 @@ function requirePermission(permission) {
       return ApiResponse.error(res, 'Authentication required.', 401);
     }
     const role = req.user.role || (req.user.admin ? ROLES.ADMIN : ROLES.USER);
+    if (role === ROLES.SUPER_ADMIN_OWNER && !ownerService.isOwnerSession(req.user)) {
+      return ApiResponse.error(res, `Forbidden: Missing '${permission}' permission.`, 403);
+    }
     if (hasPermission(role, permission) || (req.user.permissions && req.user.permissions.includes(permission))) {
       return next();
     }
@@ -117,7 +132,7 @@ function requireAdmin(req, res, next) {
   if (token) {
     const decoded = TokenUtil.verifyAccessToken(token);
     if (decoded) {
-      if (decoded.admin === true || decoded.role === ROLES.ADMIN || decoded.role === ROLES.SUPER_ADMIN) {
+      if (isAdminSession(decoded)) {
         req.user = decoded;
         return next();
       }
@@ -129,7 +144,7 @@ function requireAdmin(req, res, next) {
     const headerToken = authHeader.split(' ')[1];
     const decoded = TokenUtil.verifyAccessToken(headerToken);
     if (decoded) {
-      if (decoded.admin === true || decoded.role === ROLES.ADMIN || decoded.role === ROLES.SUPER_ADMIN) {
+      if (isAdminSession(decoded)) {
         req.user = decoded;
         return next();
       }

@@ -3,6 +3,9 @@
  */
 
 const ROLES = {
+  // Protected application owner. Granted only through Firebase Authentication
+  // plus a server-verified custom claim (see services/OwnerService.js).
+  SUPER_ADMIN_OWNER: 'SUPER_ADMIN_OWNER',
   SUPER_ADMIN: 'SUPER_ADMIN',
   ADMIN: 'ADMIN',
   MANAGER: 'MANAGER',
@@ -28,6 +31,7 @@ const PERMISSIONS = {
 };
 
 const ROLE_PERMISSIONS = {
+  [ROLES.SUPER_ADMIN_OWNER]: Object.values(PERMISSIONS),
   [ROLES.SUPER_ADMIN]: Object.values(PERMISSIONS),
   [ROLES.ADMIN]: [
     PERMISSIONS.CREATE,

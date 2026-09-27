@@ -105,6 +105,27 @@
       </button>
     </form>
 
+    <!-- Owner sign-in: the password goes straight to Firebase Authentication, never to this server -->
+    <details id="ownerSignIn" class="mt-6 pt-4 border-t border-slate-700/60">
+      <summary class="text-xs font-semibold text-slate-300 cursor-pointer select-none">Owner sign-in</summary>
+      <form onsubmit="handleOwnerLogin(event)" class="space-y-3 mt-3">
+        <p class="text-[11px] text-slate-400 leading-relaxed">For the application owner. Uses Firebase Authentication; your password is sent only to Google and never to this site's server.</p>
+        <div>
+          <label for="ownerEmailInput" class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Owner email</label>
+          <input type="email" id="ownerEmailInput" required autocomplete="username" class="w-full bg-slate-900/90 border border-slate-700 rounded-xl p-3 text-sm text-white outline-none focus:border-rose-500" />
+        </div>
+        <div>
+          <label for="ownerPasswordInput" class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1.5">Password</label>
+          <input type="password" id="ownerPasswordInput" required autocomplete="current-password" class="w-full bg-slate-900/90 border border-slate-700 rounded-xl p-3 text-sm text-white outline-none focus:border-rose-500" />
+        </div>
+        <p id="ownerLoginMessage" class="hidden text-xs"></p>
+        <div class="flex items-center justify-between gap-3">
+          <button type="button" onclick="requestOwnerPasswordReset()" class="text-[11px] text-slate-400 hover:text-rose-400 underline cursor-pointer">Forgot password?</button>
+          <button type="submit" id="ownerLoginBtn" class="bg-slate-100 hover:bg-white text-slate-900 font-bold px-4 py-2.5 rounded-xl text-sm cursor-pointer disabled:opacity-60">Sign in as owner</button>
+        </div>
+      </form>
+    </details>
+
     <div class="mt-6 pt-4 border-t border-slate-700/60 flex justify-between items-center text-xs text-slate-500">
       <a href="/" class="hover:text-rose-400 transition font-medium">← Back to Public Portal</a>
       <span class="flex items-center gap-1"><span>🛡️</span> Encrypted & Audited</span>
@@ -138,6 +159,7 @@
       <button onclick="refreshCurrentTab()" title="Refresh current data" class="text-xs font-semibold p-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 transition cursor-pointer">
         🔄 Refresh
       </button>
+      <button id="ownerRevokeBtn" onclick="revokeOwnerSessions()" class="hidden text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-200 transition cursor-pointer" title="Sign the owner account out on every device">Sign out all devices</button>
       <button onclick="handleLogout()" class="text-xs font-semibold px-3 py-2 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-800/50 text-red-300 transition cursor-pointer flex items-center gap-1">
         <span>🚪</span>
         <span>Log out</span>
@@ -761,6 +783,15 @@ async function adminFetch(url, options = {}, retries = 1) {
   try {
     const response = await fetch(url, options);
     
+    // A blocked change to the protected owner account is not a session problem.
+    if (response.status === 403 && !options.silent) {
+      const body = await response.clone().json().catch(() => null);
+      if (body && body.code === 'PROTECTED_OWNER_ACCOUNT') {
+        showToast('Protected Super Admin Owner account. This change is not allowed.', 'error');
+        return response;
+      }
+    }
+
     // If unauthorized, show login screen (unless silent)
     if ((response.status === 401 || response.status === 403) && !options.silent) {
       if (window.AppToast) {
@@ -888,6 +919,7 @@ async function handleLogin(e) {
 function enterDashboard() {
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('dashboard').classList.remove('hidden');
+  refreshOwnerControls();
   initRealtimeSubscription();
   loadStats();
   loadListings();
@@ -923,8 +955,129 @@ function showLoginScreen(msg) {
   }
 }
 
+// ---------------- Protected owner sign-in (Firebase Authentication) ----------------
+const FIREBASE_SDK_VERSION = '10.12.2';
+let ownerFirebaseAuth = null;
+
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) return resolve();
+    const el = document.createElement('script');
+    el.src = src;
+    el.onload = resolve;
+    el.onerror = () => reject(new Error('Could not load the sign-in library.'));
+    document.head.appendChild(el);
+  });
+}
+
+async function getOwnerFirebaseAuth() {
+  if (ownerFirebaseAuth) return ownerFirebaseAuth;
+  const cfgRes = await fetch('/api/config');
+  const cfg = await cfgRes.json();
+  if (!cfg.firebase) throw new Error('Owner sign-in is not configured for this site.');
+  await loadScriptOnce(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-app-compat.js`);
+  await loadScriptOnce(`https://www.gstatic.com/firebasejs/${FIREBASE_SDK_VERSION}/firebase-auth-compat.js`);
+  const fbConfig = { apiKey: cfg.firebase.webApiKey, authDomain: cfg.firebase.authDomain, projectId: cfg.firebase.projectId };
+  const app = firebase.apps.length ? firebase.app() : firebase.initializeApp(fbConfig);
+  ownerFirebaseAuth = app.auth();
+  return ownerFirebaseAuth;
+}
+
+function setOwnerMessage(text, isError) {
+  const el = document.getElementById('ownerLoginMessage');
+  el.textContent = text;
+  el.className = 'text-xs ' + (isError ? 'text-red-300' : 'text-emerald-300');
+}
+
+async function handleOwnerLogin(e) {
+  e.preventDefault();
+  const emailInput = document.getElementById('ownerEmailInput');
+  const passwordInput = document.getElementById('ownerPasswordInput');
+  const btn = document.getElementById('ownerLoginBtn');
+  btn.disabled = true;
+  setOwnerMessage('Signing in…', false);
+  try {
+    const auth = await getOwnerFirebaseAuth();
+    // The password is sent only to Firebase Authentication.
+    const cred = await auth.signInWithEmailAndPassword(emailInput.value.trim(), passwordInput.value);
+    passwordInput.value = '';
+    const idToken = await cred.user.getIdToken(true);
+    const res = await fetch('/api/admin/owner/session', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      await auth.signOut();
+      setOwnerMessage(data.message || 'This account could not be verified as the owner.', true);
+      return;
+    }
+    const token = data.accessToken || data.token || (data.data && data.data.accessToken);
+    if (token) {
+      sessionStorage.setItem('adminToken', token);
+      localStorage.setItem('adminToken', token);
+    }
+    sessionStorage.setItem('isOwnerSession', '1');
+    setOwnerMessage('', false);
+    enterDashboard();
+    showToast('Signed in as the application owner', 'success');
+  } catch (err) {
+    passwordInput.value = '';
+    const code = err && err.code ? String(err.code) : '';
+    const msg = code.includes('too-many-requests')
+      ? 'Too many attempts. Wait a few minutes, or reset your password.'
+      : (code.startsWith('auth/') ? 'Incorrect email or password.' : (err.message || 'Sign-in failed.'));
+    setOwnerMessage(msg, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function requestOwnerPasswordReset() {
+  setOwnerMessage('Requesting a reset email…', false);
+  try {
+    const res = await fetch('/api/admin/owner/password-reset', { method: 'POST', credentials: 'include' });
+    const data = await res.json().catch(() => ({}));
+    setOwnerMessage(data.message || 'If the owner account exists, a reset email has been sent.', !res.ok);
+  } catch (_) {
+    setOwnerMessage('Network error. Please try again.', true);
+  }
+}
+
+async function revokeOwnerSessions() {
+  const res = await adminFetch('/api/admin/owner/revoke-sessions', { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) {
+    try { (await getOwnerFirebaseAuth()).signOut(); } catch (_) {}
+    sessionStorage.removeItem('isOwnerSession');
+    sessionStorage.removeItem('adminToken');
+    localStorage.removeItem('adminToken');
+    showLoginScreen('Signed out on all devices. Sign in again to continue.');
+  } else {
+    showToast(data.message || 'Could not sign out other devices.', 'error');
+  }
+}
+
+async function refreshOwnerControls() {
+  const btn = document.getElementById('ownerRevokeBtn');
+  if (!btn) return;
+  try {
+    const res = await adminFetch('/api/admin/owner/session', { silent: true });
+    btn.classList.toggle('hidden', !(res && res.ok));
+  } catch (_) {
+    btn.classList.add('hidden');
+  }
+}
+
 async function handleLogout() {
   closeRealtimeSubscription();
+  if (sessionStorage.getItem('isOwnerSession')) {
+    try { await adminFetch('/api/admin/owner/logout', { method: 'POST', silent: true }); } catch (e) {}
+    try { if (ownerFirebaseAuth) await ownerFirebaseAuth.signOut(); } catch (e) {}
+    sessionStorage.removeItem('isOwnerSession');
+  }
   try {
     await adminFetch('/api/admin/logout', { method: 'POST', silent: true });
   } catch (e) {}

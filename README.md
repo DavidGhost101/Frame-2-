@@ -153,6 +153,51 @@ live Firestore database. It ships with the built-in sample listings, verificatio
 codes appear on screen, and the admin login is `admin` / `demo`. The real app in
 `public/` is unchanged.
 
+## Protected owner account (Super Admin Owner)
+
+The application owner signs in with **Firebase Authentication** and gets the
+`SUPER_ADMIN_OWNER` role, the highest admin role. How it works:
+
+1. `npm run owner:provision` (see below) creates the owner account in Firebase
+   Authentication and sets the custom claim `role: SUPER_ADMIN_OWNER` with the
+   Firebase Admin SDK. This is the only way the role is granted.
+2. On `/admin`, **Owner sign-in** signs in with Firebase in the browser. The
+   password goes only to Google and never to this server.
+3. The browser sends the Firebase ID token to `POST /api/admin/owner/session`.
+   The server verifies the token (including revocation) and grants the owner
+   session only if the token has the owner claim **and** the configured owner
+   email (`SUPER_ADMIN_EMAIL`).
+
+Protection: no admin, including the owner in the admin UI, can delete,
+suspend, block, deactivate, demote or change the role of the owner account,
+and nobody can grant the owner role through the app. Such requests return
+`403 Protected Super Admin Owner account.` and are written to the audit log
+(`OWNER_PROTECTION_BLOCKED`). Owner logins, logouts, failed sign-ins, role
+checks, password-reset requests and session revocations are audited too;
+passwords are never logged.
+
+Recovery: **Forgot password?** on the owner sign-in sends Firebase's reset
+email, always to the configured owner address. **Sign out all devices**
+revokes every owner session.
+
+### Setting up the owner account
+
+Needs a Firebase service-account key for the project (Firebase console →
+Project settings → Service accounts), and Email/Password sign-in enabled
+under Authentication → Sign-in method.
+
+```bash
+export GOOGLE_APPLICATION_CREDENTIALS=/secure/path/service-account.json
+npm run owner:provision        # prompts for the password without echoing it
+```
+
+Or pass the password from a secret manager as `SUPER_ADMIN_PASSWORD` for that
+one command, then unset it. Run the command again without a password to
+re-apply the owner claim; with one to set a new password. The server also
+needs `GOOGLE_APPLICATION_CREDENTIALS` (or a runtime service account) to
+verify owner sign-ins. Deploy `firestore.rules` after changes
+(`firebase deploy --only firestore:rules`).
+
 ## Running locally without touching the live database
 
 On startup the server syncs with the Cloud Firestore database named in

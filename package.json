@@ -14,7 +14,8 @@
     "admin:reset": "node scripts/resetAdmin.js",
     "lint": "node -e \"console.log('Lint check passed')\"",
     "test": "jest --runInBand --forceExit",
-    "build:demo": "node scripts/build-demo.js"
+    "build:demo": "node scripts/build-demo.js",
+    "owner:provision": "node scripts/provisionOwner.js"
   },
   "dependencies": {
     "@google-cloud/firestore": "^9.0.1",
@@ -26,6 +27,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "express-rate-limit": "^7.2.0",
+    "firebase-admin": "^13.10.0",
     "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.3.1",

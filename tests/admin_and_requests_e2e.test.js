@@ -171,7 +171,8 @@ describe('E2E Verification: Admin Panel, Moderation, & Room Requests', () => {
     expect(usersRes.statusCode).toEqual(200);
     const users = usersRes.body.data || usersRes.body.users || [];
     expect(users.length).toBeGreaterThan(0);
-    const firstUser = users[0];
+    // The owner-linked admin account is protected, so use an ordinary user.
+    const firstUser = users.find(u => u.role === 'USER' || u.role === 'LANDLORD') || users[0];
 
     // Update status
     const statusRes = await request(app)
